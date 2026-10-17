@@ -48,13 +48,26 @@ export function collectSubtree(docs: Doc[], rootId: string): string[] {
 }
 
 export async function deleteDoc(id: string) {
-  await db.transaction('rw', [db.docs, db.blocks, db.pages, db.cards], async () => {
-    const ids = collectSubtree(await db.docs.toArray(), id);
+  let fileIds: string[] = [];
+  await db.transaction('rw', [db.docs, db.blocks, db.pages, db.cards, db.annotations], async () => {
+    const all = await db.docs.toArray();
+    const ids = collectSubtree(all, id);
+    const blocks = await db.blocks.where('docId').anyOf(ids).toArray();
+    // файлы PDF и картинок этих документов — удалим, если больше нигде не используются
+    fileIds = [
+      ...all.filter((d) => ids.includes(d.id) && d.fileId).map((d) => d.fileId!),
+      ...blocks.flatMap((b) => (b.image?.fileId ? [b.image.fileId] : [])),
+    ];
     await db.blocks.where('docId').anyOf(ids).delete();
     await db.pages.where('docId').anyOf(ids).delete();
     await db.cards.where('docId').anyOf(ids).delete();
+    await db.annotations.where('docId').anyOf(ids).delete();
     await db.docs.bulkDelete(ids);
   });
+  if (fileIds.length) {
+    const { cleanupFiles } = await import('./images');
+    await cleanupFiles(fileIds);
+  }
 }
 
 export async function moveDoc(id: string, newParentId: string | null) {

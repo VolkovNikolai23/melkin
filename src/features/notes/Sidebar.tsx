@@ -9,6 +9,8 @@ import { navigate } from '../../lib/router';
 import { beginDrag } from '../../components/dnd';
 import { TYPE_ICON } from './docIcons';
 import { getOrCreateDaily } from './daily';
+import { pickFiles } from './images';
+import { importPdf } from '../pdf/annotations';
 import { badgeCount, sumDue, type DueCount } from '../review/scheduler';
 import { createContext, useContext } from 'react';
 import { setTemplate } from './templates';
@@ -19,6 +21,11 @@ import { collectSubtree, createDoc, deleteDoc, moveDoc, moveDocTo, renameDoc, sh
 const DueCtx = createContext<{ byDoc: Map<string, DueCount>; newLeft: number } | null>(null);
 
 async function create(type: DocType, parentId: string | null) {
+  if (type === 'pdf') {
+    const [file] = await pickFiles('application/pdf,.pdf', false);
+    if (file) navigate(`doc/${(await importPdf(file, parentId)).id}`);
+    return;
+  }
   const doc = await createDoc(type, parentId);
   if (type === 'folder') {
     const name = await dialog.prompt('Название папки', doc.title);
@@ -53,6 +60,7 @@ function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: 
           { label: 'Новая заметка', icon: 'note' as const, onClick: () => create('note', doc.id) },
           { label: 'Новая тетрадь', icon: 'notebook' as const, onClick: () => create('notebook', doc.id) },
           { label: 'Новая папка', icon: 'folder' as const, onClick: () => create('folder', doc.id) },
+          { label: 'Импорт PDF', icon: 'pdf' as const, onClick: () => create('pdf', doc.id) },
         ]
       : []),
     { label: 'Повторить карточки', icon: 'cards', onClick: () => navigate(`review?scope=${isFolder ? 'folder' : 'doc'}:${doc.id}`) },
@@ -225,6 +233,9 @@ export function Sidebar({
         </button>
         <button className="btn ghost small" onClick={() => create('notebook', null)}>
           <Icon name="notebook" size={18} /> Тетрадь
+        </button>
+        <button className="btn ghost small" onClick={() => create('pdf', null)}>
+          <Icon name="pdf" size={18} /> PDF
         </button>
         <button className="btn ghost small" onClick={() => create('folder', null)}>
           <Icon name="folder" size={18} /> Папка

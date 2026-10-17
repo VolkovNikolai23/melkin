@@ -160,7 +160,9 @@ export function NotebookView({ doc }: { doc: Doc }) {
 
   const goTo = (i: number) => {
     const el = scroller?.querySelector<HTMLElement>(`[data-page="${i}"]`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!scroller || !el) return;
+    const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 8;
+    scroller.scrollTo({ top, behavior: 'smooth' });
   };
 
   const addPage = async () => {

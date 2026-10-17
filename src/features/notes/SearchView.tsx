@@ -29,7 +29,13 @@ export function SearchView({ initial }: { initial: string }) {
     const titles = new Map(docs.map((d) => [d.id, d.title]));
     const docHits = docs.filter((d) => d.title.toLowerCase().includes(dq)).slice(0, 20);
     const blockHits = await db.blocks.filter((b) => b.kind === 'text' && b.text.toLowerCase().includes(dq)).limit(200).toArray();
-    return { docHits, blockHits: blockHits.map((b) => ({ b, title: titles.get(b.docId) ?? '' })) };
+    // выделения в PDF тоже ищутся
+    const annHits = await db.annotations.filter((a) => a.kind === 'highlight' && !!a.text && a.text.toLowerCase().includes(dq)).limit(50).toArray();
+    return {
+      docHits,
+      blockHits: blockHits.map((b) => ({ b, title: titles.get(b.docId) ?? '' })),
+      annHits: annHits.map((a) => ({ a, title: titles.get(a.docId) ?? '' })),
+    };
   }, [dq]);
 
   return (
@@ -40,11 +46,19 @@ export function SearchView({ initial }: { initial: string }) {
       </div>
       {res && (
         <div className="search-results">
-          {res.docHits.length === 0 && res.blockHits.length === 0 && <p className="muted">Ничего не найдено.</p>}
+          {res.docHits.length === 0 && res.blockHits.length === 0 && res.annHits.length === 0 && <p className="muted">Ничего не найдено.</p>}
           {res.docHits.map((d) => (
             <button key={d.id} className="search-hit" onClick={() => navigate(`doc/${d.id}`)}>
               <strong>{d.title}</strong>
               <small>документ</small>
+            </button>
+          ))}
+          {res.annHits.map(({ a, title }) => (
+            <button key={a.id} className="search-hit" onClick={() => navigate(`doc/${a.docId}?page=${a.page}&a=${a.id}`)}>
+              <span dangerouslySetInnerHTML={{ __html: snippet(a.text!, dq) }} />
+              <small>
+                выделение в PDF · {title}, стр. {a.page}
+              </small>
             </button>
           ))}
           {res.blockHits.map(({ b, title }) => (

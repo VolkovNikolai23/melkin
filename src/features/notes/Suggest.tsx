@@ -29,7 +29,8 @@ export type SlashCommand =
   | 'number'
   | 'props'
   | 'math'
-  | 'card';
+  | 'card'
+  | 'pdf';
 
 const SLASH: { cmd: SlashCommand; label: string; icon: IconName; kw: string }[] = [
   { cmd: 'image', label: 'Картинка', icon: 'image', kw: 'картинка фото изображение рисунок image photo' },
@@ -45,6 +46,7 @@ const SLASH: { cmd: SlashCommand; label: string; icon: IconName; kw: string }[] 
   { cmd: 'props', label: 'Свойства блока', icon: 'props', kw: 'свойство свойства поле property' },
   { cmd: 'math', label: 'Формула (блочная)', icon: 'sigma', kw: 'формула latex math tex' },
   { cmd: 'card', label: 'Карточка вопрос >> ответ', icon: 'card', kw: 'карточка вопрос ответ card flashcard' },
+  { cmd: 'pdf', label: 'Импорт PDF (ссылка на него)', icon: 'pdf', kw: 'pdf пдф файл документ учебник' },
 ];
 
 interface Ops {

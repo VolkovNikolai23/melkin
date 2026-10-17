@@ -2085,3 +2085,311 @@ button.card-badge {
   width: 100%;
   background: var(--paper);
 }
+
+/* ---------- PDF ---------- */
+.pdf-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.pdf-toolbar .tool-btn.text {
+  gap: 6px;
+  padding: 0 10px;
+}
+.pdf-toolbar .ink-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.pdf-toolbar-spacer {
+  flex: 1;
+}
+.pdf-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.pdf-search input {
+  border: 0;
+  background: none;
+  outline: none;
+  min-height: 38px;
+  width: 150px;
+  font-size: 15px;
+  color: var(--text);
+}
+.pdf-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.pdf-thumbs {
+  width: 136px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding: 10px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.pdf-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+}
+.pdf-thumb canvas {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.pdf-thumb.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pdf-scroll {
+  flex: 1;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--surface-2);
+  padding: 16px 16px calc(60px + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.pdf-page {
+  position: relative;
+  flex-shrink: 0;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+.pdf-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.pdf-placeholder {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+}
+.pdf-page-num {
+  position: absolute;
+  right: -6px;
+  bottom: -20px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pdf-highlights {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+.pdf-hl {
+  position: absolute;
+  opacity: 0.55;
+  border-radius: 2px;
+}
+.pdf-hl.flash {
+  animation: pdfflash 0.6s ease-in-out 3;
+}
+@keyframes pdfflash {
+  50% {
+    opacity: 0.15;
+  }
+}
+.pdf-ink-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.pdf-ink-layer.active {
+  pointer-events: auto;
+}
+.pdf-ink-layer .ink-wrap,
+.pdf-ink-layer .ink-canvas {
+  width: 100%;
+  height: 100%;
+}
+.ink-canvas.pdf-ink {
+  background: transparent;
+}
+.pdf-region-layer {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: none;
+  z-index: 3;
+}
+.pdf-region {
+  position: absolute;
+  border: 2px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.pdf-pop {
+  position: fixed;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  max-width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 6px;
+}
+.pdf-hits {
+  position: absolute;
+  z-index: 30;
+  right: 12px;
+  top: 56px;
+  width: min(360px, calc(100% - 24px));
+  max-height: 60%;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 6px;
+}
+.pdf-hits-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: var(--muted);
+  padding: 0 4px 0 8px;
+}
+.pdf-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 14px;
+  padding: 8px;
+  border-radius: 8px;
+}
+.pdf-hit:hover {
+  background: var(--surface-2);
+}
+.pdf-hit small {
+  color: var(--accent);
+  font-weight: 600;
+  margin-right: 6px;
+}
+.pdf-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin: 0 0 4px 4px;
+}
+
+/* Текстовый слой pdf.js (по pdf_viewer.css) — прозрачный текст поверх картинки страницы */
+.textLayer {
+  color-scheme: only light;
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 0;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+.textLayer.inactive {
+  pointer-events: none;
+}
+.textLayer span,
+.textLayer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.textLayer .markedContent {
+  display: contents;
+}
+.textLayer ::selection {
+  background: rgba(0, 0, 255, 0.25);
+  color: transparent;
+}
+.textLayer br::selection {
+  background: transparent;
+}
+.textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.textLayer.selecting .endOfContent {
+  top: 0;
+}
+.textLayer span.search-hit {
+  background: rgba(255, 170, 0, 0.35);
+  border-radius: 2px;
+}
+/* страница PDF всегда белая — «авто»-чернила на ней тёмные и в тёмной теме */
+.pdf-ink-layer {
+  --ink-auto: #1f1e24;
+}
+.main-scroll:has(.is-notebook) {
+  overscroll-behavior: none;
+}
+.block-text .placeholder {
+  color: var(--muted);
+  opacity: 0.55;
+  font-style: italic;
+}

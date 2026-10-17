@@ -36,8 +36,8 @@ export default defineConfig({
       },
       workbox: {
         // Кэшируем всё, включая шрифты KaTeX, — после первой загрузки сеть не нужна.
-        globPatterns: ['**/*.{js,css,html,woff2,woff,ttf,png,svg,ico,webmanifest}'],
-        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        globPatterns: ['**/*.{js,mjs,css,html,woff2,woff,ttf,pfb,png,svg,ico,webmanifest,bcmap,wasm,icc}'],
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
       },

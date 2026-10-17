@@ -22,6 +22,7 @@ import { insertImages, pickFiles } from './images';
 import { SuggestPopup, useSuggestions, type SlashCommand } from './Suggest';
 import { insertTemplate, listTemplates } from './templates';
 import { detectTrigger, type Trigger } from './trigger';
+import { fixRussianLayout } from '../../lib/layout';
 
 const DRAW_COMMANDS = ['/draw', '/рисунок', '/рис'];
 
@@ -91,7 +92,7 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
 
   const runSlash = async (cmd: SlashCommand, start: number) => {
     // выбор файла должен начаться синхронно, внутри жеста пользователя (требование iPadOS)
-    const files = cmd === 'image' ? pickFiles('image/*') : null;
+    const files = cmd === 'image' ? pickFiles('image/*') : cmd === 'pdf' ? pickFiles('application/pdf,.pdf', false) : null;
     replaceRange(start, '');
     switch (cmd) {
       case 'image': {
@@ -128,6 +129,15 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
         return replaceRange(start, '$$  $$', 3);
       case 'card':
         return run('sep:>>');
+      case 'pdf': {
+        const [file] = await files!;
+        if (!file) return;
+        const { importPdf } = await import('../pdf/annotations');
+        const pdfDoc = await importPdf(file, null);
+        replaceRange(ref.current?.selectionStart ?? start, `[[${pdfDoc.title}]]`);
+        await flush();
+        return;
+      }
       case 'h1':
       case 'h2':
       case 'h3':
@@ -499,6 +509,13 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
       onChange={(e) => {
         // Быстрый ввод как в Markdown: «# » → H1, «## » → H2, «### » → H3, «1. » → нумерация
         const ta = e.target;
+        // «ЮЮ», «ХХ…ЪЪ» и т. п. — разметка, набранная в русской раскладке; длина не меняется
+        const fixed = fixRussianLayout(ta.value);
+        if (fixed !== ta.value) {
+          const pos = ta.selectionStart;
+          ta.value = fixed;
+          ta.setSelectionRange(pos, pos);
+        }
         const md = ta.value.match(/^(#{1,3}|1\.) /);
         if (md && !textRef.current.startsWith(md[0])) {
           if (md[1] === '1.') setBlockProps(block.id, { list: 'number' });

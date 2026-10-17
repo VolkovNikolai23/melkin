@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { db } from '../../db/db';
 import type { Doc } from '../../db/schema';
@@ -7,6 +7,9 @@ import { navigate } from '../../lib/router';
 import { NotebookView } from '../ink/NotebookView';
 import { createDoc, DOC_LABEL, renameDoc, sortDocs } from './docs';
 import { Outliner } from './Outliner';
+
+// pdf.js подгружается только при открытии PDF
+const PdfView = lazy(() => import('../pdf/PdfView'));
 import { Backlinks, TagTable } from '../links/LinkViews';
 import { normalizeTag } from '../../lib/markup';
 import { TYPE_ICON } from './docIcons';
@@ -80,7 +83,7 @@ function FolderView({ doc }: { doc: Doc }) {
   );
 }
 
-export function DocPage({ id, highlight }: { id: string; highlight: string | null }) {
+export function DocPage({ id, highlight, page, ann }: { id: string; highlight: string | null; page?: number | null; ann?: string | null }) {
   // null — документа нет (удалён); undefined — ещё загружается
   const doc = useLiveQuery(() => db.docs.get(id).then((d) => d ?? null), [id]);
   const cardsDue = useLiveQuery(() => db.cards.where('docId').equals(id).count(), [id]);
@@ -88,7 +91,7 @@ export function DocPage({ id, highlight }: { id: string; highlight: string | nul
   if (doc === null) return <div className="page-pad muted">Документ не найден.</div>;
 
   return (
-    <div className={'doc-page' + (doc.type === 'notebook' ? ' is-notebook' : '')}>
+    <div className={'doc-page' + (doc.type === 'notebook' || doc.type === 'pdf' ? ' is-notebook' : '')}>
       <header className="doc-head">
         <Breadcrumbs doc={doc} />
         <div className="doc-head-row">
@@ -110,6 +113,11 @@ export function DocPage({ id, highlight }: { id: string; highlight: string | nul
       {doc.type !== 'folder' && !/\s/.test(doc.title.trim()) && <TagTable tag={normalizeTag(doc.title)} title={`Блоки с тегом #${normalizeTag(doc.title)}`} />}
       {doc.type !== 'folder' && <Backlinks docId={doc.id} />}
       {doc.type === 'notebook' && <NotebookView doc={doc} />}
+      {doc.type === 'pdf' && (
+        <Suspense fallback={<div className="page-pad muted">Открываю PDF…</div>}>
+          <PdfView doc={doc} initialPage={page ?? null} flashId={ann ?? null} />
+        </Suspense>
+      )}
       {doc.type === 'folder' && <FolderView doc={doc} />}
     </div>
   );

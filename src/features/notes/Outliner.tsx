@@ -23,7 +23,8 @@ import { HIGHLIGHT_COLORS, renderText } from './render';
 
 const RenderedText = memo(function RenderedText({ text }: { text: string }) {
   const html = useMemo(() => renderText(text), [text]);
-  if (!text.trim()) return <span className="placeholder">&nbsp;</span>;
+  // пустая строка не должна выглядеть как «ничего» — подсказываем, что сюда можно писать
+  if (!text.trim()) return <span className="placeholder">Нажмите, чтобы писать (вопрос &gt;&gt; ответ — карточка)</span>;
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
 });
 
@@ -143,6 +144,15 @@ export function BlockItem({ block }: { block: Block }) {
               <RenderedText text={block.text} />
             </div>
           )}
+          {block.pdfRef && (
+            <button
+              className="pdf-ref"
+              onClick={() => navigate(`doc/${block.pdfRef!.docId}?page=${block.pdfRef!.page}`)}
+              title="Открыть место в PDF"
+            >
+              <Icon name="pdf" size={14} /> стр. {block.pdfRef.page}
+            </button>
+          )}
           <PropsView
             block={block}
             open={ctx.propsOpen === block.id}
@@ -208,7 +218,7 @@ function EditToolbar({ api }: { api: OutlinerCtx['editorApi'] }) {
         { label: 'список >>1.', onClick: () => run('sep:>>1.') },
         { label: 'выбор ответа >>A)', onClick: () => run('sep:>>A)') },
       ],
-      icon: 'card',
+      text: 'Карточка ▾',
       label: 'Сделать карточкой',
     },
     { a: 'cardsOff', icon: 'cardOff', label: 'Отключить/включить карточки блока' },

@@ -3,6 +3,8 @@ import { db } from '../db/db';
 import { BACKUP_REMIND_DAYS, getLastBackup } from '../db/backup';
 import { createDoc, DOC_LABEL } from '../features/notes/docs';
 import { getOrCreateDaily } from '../features/notes/daily';
+import { pickFiles } from '../features/notes/images';
+import { importPdf } from '../features/pdf/annotations';
 import { navigate } from '../lib/router';
 import { TYPE_ICON } from '../features/notes/docIcons';
 import { plural } from '../lib/time';
@@ -69,6 +71,16 @@ export function Home() {
           <button className="doc-card new" onClick={() => create('note')}>
             <Icon name="plus" />
             <span>Новая заметка</span>
+          </button>
+          <button
+            className="doc-card new"
+            onClick={async () => {
+              const [f] = await pickFiles('application/pdf,.pdf', false);
+              if (f) navigate(`doc/${(await importPdf(f, null)).id}`);
+            }}
+          >
+            <Icon name="pdf" />
+            <span>Импорт PDF</span>
           </button>
           <button className="doc-card new" onClick={() => create('notebook')}>
             <Icon name="plus" />
