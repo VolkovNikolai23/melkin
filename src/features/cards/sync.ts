@@ -1,11 +1,11 @@
 import { createEmptyCard } from 'ts-fsrs';
 import { db } from '../../db/db';
-import type { CardRow } from '../../db/schema';
+import type { Block, CardRow } from '../../db/schema';
 import { parseCards, type ParsedCard } from './parser';
 
 export const cardId = (blockId: string, key: string) => `${blockId}#${key}`;
 
-export function newCardRow(blockId: string, docId: string, p: ParsedCard, now: number): CardRow {
+export function newCardRow(blockId: string, docId: string, p: ParsedCard, now: number, disabled = false): CardRow {
   const e = createEmptyCard(new Date(now));
   return {
     id: cardId(blockId, p.key),
@@ -13,8 +13,11 @@ export function newCardRow(blockId: string, docId: string, p: ParsedCard, now: n
     docId,
     kind: p.kind,
     clozeIndex: p.clozeIndex,
+    sub: p.sub,
     front: p.front,
     back: p.back,
+    concept: p.concept,
+    disabled: disabled || undefined,
     createdAt: now,
     due: e.due.getTime(),
     stability: e.stability,
@@ -29,9 +32,11 @@ export function newCardRow(blockId: string, docId: string, p: ParsedCard, now: n
   };
 }
 
+const CONTENT_FIELDS = ['kind', 'front', 'back', 'clozeIndex', 'sub', 'concept', 'docId', 'disabled'] as const;
+
 /**
  * Чистая функция: что нужно сделать с карточками блока после правки текста.
- * Карточки с тем же ключом обновляют только текст — расписание FSRS сохраняется.
+ * Карточки с тем же ключом обновляют только содержимое — расписание FSRS сохраняется.
  */
 export function planCardSync(
   blockId: string,
@@ -39,6 +44,7 @@ export function planCardSync(
   parsed: ParsedCard[],
   existing: CardRow[],
   now: number,
+  disabled = false,
 ): { put: CardRow[]; remove: string[] } {
   const byId = new Map(existing.map((c) => [c.id, c]));
   const put: CardRow[] = [];
@@ -47,23 +53,45 @@ export function planCardSync(
     const id = cardId(blockId, p.key);
     keep.add(id);
     const old = byId.get(id);
-    if (!old) put.push(newCardRow(blockId, docId, p, now));
-    else if (old.front !== p.front || old.back !== p.back || old.clozeIndex !== p.clozeIndex || old.docId !== docId) {
-      put.push({ ...old, front: p.front, back: p.back, clozeIndex: p.clozeIndex, docId });
+    if (!old) {
+      put.push(newCardRow(blockId, docId, p, now, disabled));
+      continue;
     }
+    const next: CardRow = { ...old, kind: p.kind, front: p.front, back: p.back, clozeIndex: p.clozeIndex, sub: p.sub, concept: p.concept, docId, disabled: disabled || undefined };
+    if (CONTENT_FIELDS.some((f) => (old[f] ?? undefined) !== (next[f] ?? undefined))) put.push(next);
   }
   const remove = existing.filter((c) => !keep.has(c.id)).map((c) => c.id);
   return { put, remove };
 }
 
-/** Пересобирает карточки блока по его текущему тексту. */
+async function syncOne(block: Block | undefined, blockId: string) {
+  const existing = await db.cards.where('blockId').equals(blockId).toArray();
+  let parsed: ParsedCard[] = [];
+  if (block && block.kind === 'text') {
+    const parent = block.parentId ? await db.blocks.get(block.parentId) : undefined;
+    parsed = parseCards(block.text, { parentText: parent?.text });
+  }
+  const { put, remove } = planCardSync(blockId, block?.docId ?? '', parsed, existing, Date.now(), !!block?.cardsOff);
+  if (remove.length) await db.cards.bulkDelete(remove);
+  if (put.length) await db.cards.bulkPut(put);
+}
+
+/**
+ * Пересобирает карточки блока по его текущему тексту.
+ * Описания (;;) у дочерних блоков зависят от названия понятия-родителя — их тоже обновляем.
+ */
 export async function syncBlockCards(blockId: string) {
   await db.transaction('rw', db.blocks, db.cards, async () => {
     const block = await db.blocks.get(blockId);
-    const existing = await db.cards.where('blockId').equals(blockId).toArray();
-    const parsed = block && block.kind === 'text' ? parseCards(block.text) : [];
-    const { put, remove } = planCardSync(blockId, block?.docId ?? '', parsed, existing, Date.now());
-    if (remove.length) await db.cards.bulkDelete(remove);
-    if (put.length) await db.cards.bulkPut(put);
+    await syncOne(block, blockId);
+    if (!block) return;
+    const kids = await db.blocks.where('parentId').equals(blockId).filter((b) => b.text.includes(';;')).toArray();
+    for (const k of kids) await syncOne(k, k.id);
   });
+}
+
+/** Полная пересборка всех карточек (после миграции схемы или импорта). */
+export async function resyncAllCards() {
+  const ids = await db.blocks.toCollection().primaryKeys();
+  for (const id of ids) await syncBlockCards(id as string);
 }

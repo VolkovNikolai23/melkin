@@ -1,22 +1,31 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useRef, useState } from 'react';
 import { db, getSettings, saveSettings } from '../db/db';
-import { deliverFile, getLastBackup, importBackup, makeBackupFile, markBackupDone, parseBackup } from '../db/backup';
+import { deliverFile, getLastBackup, importBackup, makeBackupFile, markBackupDone, readBackup } from '../db/backup';
 import { formatDate } from '../lib/time';
 import { dialog } from './dialog';
 import { Icon } from './Icon';
 
+function formatBytes(n: number) {
+  if (n < 1024) return `${n} Б`;
+  if (n < 1024 ** 2) return `${(n / 1024).toFixed(0)} КБ`;
+  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1).replace('.', ',')} МБ`;
+  return `${(n / 1024 ** 3).toFixed(1).replace('.', ',')} ГБ`;
+}
+
 export function SettingsView() {
   const settings = useLiveQuery(getSettings, []);
   const lastBackup = useLiveQuery(getLastBackup, []);
-  const stats = useLiveQuery(async () => ({ docs: await db.docs.count(), blocks: await db.blocks.count(), cards: await db.cards.count() }), []);
+  const stats = useLiveQuery(async () => ({ docs: await db.docs.count(), blocks: await db.blocks.count(), cards: await db.cards.count(), files: await db.files.count() }), []);
   const [pending, setPending] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [persisted, setPersisted] = useState<boolean | null>(null);
+  const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     navigator.storage?.persisted?.().then(setPersisted).catch(() => setPersisted(null));
+    navigator.storage?.estimate?.().then((e) => setUsage({ usage: e.usage ?? 0, quota: e.quota ?? 0 })).catch(() => setUsage(null));
   }, []);
 
   const doExport = async (file?: File) => {
@@ -38,7 +47,7 @@ export function SettingsView() {
 
   const doImport = async (file: File) => {
     try {
-      const backup = parseBackup(await file.text());
+      const backup = await readBackup(file);
       const n = (backup.data.docs ?? []).length;
       const choice = await dialog.choose(
         'Восстановить из копии?',
@@ -65,7 +74,7 @@ export function SettingsView() {
       <section className="panel">
         <h2>Резервная копия</h2>
         <p className="muted">
-          Все данные хранятся только на этом устройстве. Регулярно сохраняйте копию в «Файлы» или iCloud Drive.
+          Все данные хранятся только на этом устройстве. Регулярно сохраняйте копию (.zip: заметки, карточки, картинки и PDF) в «Файлы» или iCloud Drive.
           <br />
           Последняя копия: <strong>{lastBackup ? formatDate(lastBackup) : 'ещё не было'}</strong>
         </p>
@@ -84,7 +93,7 @@ export function SettingsView() {
           <input
             ref={fileRef}
             type="file"
-            accept=".json,application/json"
+            accept=".zip,.json,application/zip,application/json"
             hidden
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -115,7 +124,9 @@ export function SettingsView() {
       <section className="panel">
         <h2>Хранилище</h2>
         <p className="muted">
-          Документов: {stats?.docs ?? '…'}, блоков: {stats?.blocks ?? '…'}, карточек: {stats?.cards ?? '…'}.
+          Документов: {stats?.docs ?? '…'}, блоков: {stats?.blocks ?? '…'}, карточек: {stats?.cards ?? '…'}, файлов: {stats?.files ?? '…'}.
+          <br />
+          Занято: {usage ? `${formatBytes(usage.usage)} из доступных ${formatBytes(usage.quota)}` : 'неизвестно'}
           <br />
           Постоянное хранилище: {persisted === null ? 'неизвестно' : persisted ? 'включено ✓' : 'не подтверждено (на iPad установите приложение на экран «Домой»)'}
         </p>

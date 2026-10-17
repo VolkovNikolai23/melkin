@@ -1,23 +1,41 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { beginDrag } from '../../components/dnd';
 import { Icon, type IconName } from '../../components/Icon';
-import { MenuButton } from '../../components/Menu';
+import { MenuButton, type MenuItem } from '../../components/Menu';
 import { dialog } from '../../components/dialog';
 import { db } from '../../db/db';
 import type { Block } from '../../db/schema';
 import { keepKeyboard } from '../../lib/keyboard';
+import { navigate } from '../../lib/router';
 import { InkBlock } from '../ink/InkBlock';
 import { InkToolbar } from '../ink/InkToolbar';
 import { BlockEditor } from './BlockEditor';
-import { appendBlock, childrenMap, deleteBlock, indent, insertAfter, moveBlock, outdent, setCollapsed, visibleOrder } from './blocks';
+import { appendBlock, childrenMap, deleteBlock, indent, insertAfter, moveBlock, moveBlockTo, outdent, setCollapsed, visibleOrder } from './blocks';
+import { createDoc } from './docs';
 import { OutlinerContext, useOutliner, type Caret, type EditorAction, type OutlinerCtx } from './outlinerContext';
-import { renderText } from './render';
+import { HIGHLIGHT_COLORS, renderText } from './render';
 
 const RenderedText = memo(function RenderedText({ text }: { text: string }) {
   const html = useMemo(() => renderText(text), [text]);
   if (!text.trim()) return <span className="placeholder">&nbsp;</span>;
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
 });
+
+/** Переход по [[ссылке]]: открываем документ с таким названием или создаём новый. */
+export async function openLink(title: string) {
+  const t = title.trim().toLowerCase();
+  const doc = await db.docs.filter((d) => d.type !== 'folder' && d.title.trim().toLowerCase() === t).first();
+  navigate(`doc/${(doc ?? (await createDoc('note', null, title.trim()))).id}`);
+}
+
+/** Номер пункта нумерованного списка: считаем подряд идущих соседей с нумерацией. */
+function listNumber(block: Block, siblings: Block[]): number {
+  const i = siblings.findIndex((s) => s.id === block.id);
+  let n = 1;
+  for (let j = i - 1; j >= 0 && siblings[j].list === 'number'; j--) n++;
+  return n;
+}
 
 function BlockItem({ block }: { block: Block }) {
   const ctx = useOutliner();
@@ -32,22 +50,35 @@ function BlockItem({ block }: { block: Block }) {
   }, [highlighted]);
 
   const startEdit = (e: React.MouseEvent) => {
-    // клик по ссылке/выделению внутри формулы не должен мешать
+    const t = e.target as HTMLElement;
+    const link = t.closest('[data-link]');
+    if (link) return openLink(link.getAttribute('data-link')!);
+    const tag = t.closest('[data-tag]');
+    if (tag) return navigate(`search?q=${encodeURIComponent('#' + tag.getAttribute('data-tag'))}`);
     if (window.getSelection()?.toString()) return;
     e.preventDefault();
     keepKeyboard();
     ctx.setEditing({ id: block.id, caret: 'end' });
   };
 
-  const inkMenu = [
-    { label: 'Текстовый блок ниже', icon: 'plus' as const, onClick: async () => ctx.setEditing({ id: (await insertAfter(block, '', 'text', false)).id, caret: 'start' }) },
-    { label: 'Вложить', icon: 'indent' as const, onClick: () => indent(block) },
-    { label: 'Вынести', icon: 'outdent' as const, onClick: () => outdent(block) },
-    { label: 'Выше', icon: 'arrowUp' as const, onClick: () => moveBlock(block, -1) },
-    { label: 'Ниже', icon: 'arrowDown' as const, onClick: () => moveBlock(block, 1) },
+  const onBulletDown = (e: React.PointerEvent) =>
+    beginDrag(e, {
+      attr: 'data-drop-block',
+      id: block.id,
+      label: block.kind === 'ink' ? 'Рисунок' : block.text.slice(0, 40),
+      canNest: () => true,
+      onDrop: (tid, pos) => moveBlockTo(block.id, tid, pos),
+    });
+
+  const inkMenu: MenuItem[] = [
+    { label: 'Текстовый блок ниже', icon: 'plus', onClick: async () => ctx.setEditing({ id: (await insertAfter(block, '', 'text', false)).id, caret: 'start' }) },
+    { label: 'Вложить', icon: 'indent', onClick: () => indent(block) },
+    { label: 'Вынести', icon: 'outdent', onClick: () => outdent(block) },
+    { label: 'Выше', icon: 'arrowUp', onClick: () => moveBlock(block, -1) },
+    { label: 'Ниже', icon: 'arrowDown', onClick: () => moveBlock(block, 1) },
     {
       label: 'Удалить рисунок',
-      icon: 'trash' as const,
+      icon: 'trash',
       danger: true,
       onClick: async () => {
         if (await dialog.confirm('Удалить рисунок?', 'Удалить')) deleteBlock(block);
@@ -55,15 +86,29 @@ function BlockItem({ block }: { block: Block }) {
     },
   ];
 
+  const siblings = ctx.kids.get(block.parentId) ?? [];
+  const numbered = block.list === 'number';
+
   return (
     <div className="block">
-      <div ref={rowRef} className={'block-row' + (highlighted ? ' flash' : '') + (block.kind === 'ink' ? ' ink-row' : '')}>
+      <div
+        ref={rowRef}
+        data-drop-block={block.id}
+        className={
+          'block-row' +
+          (highlighted ? ' flash' : '') +
+          (block.kind === 'ink' ? ' ink-row' : '') +
+          (block.heading ? ` h${block.heading}` : '')
+        }
+      >
         <button
-          className={'bullet' + (kids.length ? ' has-kids' : '') + (block.collapsed && kids.length ? ' collapsed' : '')}
+          className={'bullet' + (kids.length ? ' has-kids' : '') + (block.collapsed && kids.length ? ' collapsed' : '') + (numbered ? ' numbered' : '')}
           aria-label={kids.length ? (block.collapsed ? 'Развернуть' : 'Свернуть') : 'Блок'}
+          title="Нажмите — свернуть, удерживайте — перетащить"
+          onPointerDown={onBulletDown}
           onClick={() => (kids.length ? setCollapsed(block.id, !block.collapsed) : block.kind === 'text' && ctx.setEditing({ id: block.id, caret: 'end' }))}
         >
-          <span className="dot" />
+          {numbered ? <span className="num">{listNumber(block, siblings)}.</span> : <span className="dot" />}
         </button>
         <div className="block-body">
           {block.kind === 'ink' ? (
@@ -77,8 +122,8 @@ function BlockItem({ block }: { block: Block }) {
           )}
         </div>
         {cards > 0 && !editing && (
-          <span className="card-badge" title="Карточек в блоке">
-            <Icon name="cards" size={14} />
+          <span className={'card-badge' + (block.cardsOff ? ' off' : '')} title={block.cardsOff ? 'Карточки отключены' : 'Карточек в блоке'}>
+            <Icon name={block.cardsOff ? 'cardOff' : 'cards'} size={14} />
             {cards > 1 ? cards : ''}
           </span>
         )}
@@ -95,27 +140,62 @@ function BlockItem({ block }: { block: Block }) {
   );
 }
 
-const EDIT_TOOLS: { a: EditorAction; icon?: IconName; text?: string; label: string }[] = [
-  { a: 'outdent', icon: 'outdent', label: 'Вынести (Shift+Tab)' },
-  { a: 'indent', icon: 'indent', label: 'Вложить (Tab)' },
-  { a: 'up', icon: 'arrowUp', label: 'Переместить выше' },
-  { a: 'down', icon: 'arrowDown', label: 'Переместить ниже' },
-  { a: 'math', text: '$x$', label: 'Формула' },
-  { a: 'cloze', text: '{{ }}', label: 'Клоз' },
-  { a: 'card', text: '::', label: 'Карточка вопрос :: ответ' },
-  { a: 'draw', icon: 'pen', label: 'Рукописный блок' },
-  { a: 'delete', icon: 'trash', label: 'Удалить блок' },
-  { a: 'done', icon: 'keyboard', label: 'Готово' },
-];
+type Tool = { a: EditorAction; icon?: IconName; text?: string; label: string } | { menu: MenuItem[]; icon?: IconName; text?: string; label: string } | 'sep';
+
+const HL_LABEL: Record<string, string> = { yellow: 'Жёлтый', green: 'Зелёный', blue: 'Синий', pink: 'Розовый', red: 'Красный', purple: 'Фиолетовый' };
 
 function EditToolbar({ api }: { api: OutlinerCtx['editorApi'] }) {
+  const run = (a: EditorAction) => api.current?.(a);
+  const tools: Tool[] = [
+    { a: 'outdent', icon: 'outdent', label: 'Вынести (Shift+Tab)' },
+    { a: 'indent', icon: 'indent', label: 'Вложить (Tab)' },
+    { a: 'up', icon: 'arrowUp', label: 'Выше (⌘⇧↑)' },
+    { a: 'down', icon: 'arrowDown', label: 'Ниже (⌘⇧↓)' },
+    'sep',
+    { a: 'bold', icon: 'bold', label: 'Жирный (⌘B)' },
+    { a: 'italic', icon: 'italic', label: 'Курсив (⌘I)' },
+    { a: 'underline', icon: 'underline', label: 'Подчёркнутый (⌘U)' },
+    { menu: HIGHLIGHT_COLORS.map((c) => ({ label: HL_LABEL[c], swatch: c, onClick: () => run(`hl:${c}`) })), icon: 'highlight', label: 'Выделение цветом' },
+    { a: 'heading', icon: 'heading', label: 'Заголовок H1 → H2 → H3 → текст' },
+    { a: 'number', icon: 'listNumber', label: 'Нумерованный пункт' },
+    'sep',
+    { a: 'math', text: '$x$', label: 'Формула' },
+    { a: 'cloze', text: '{{ }}', label: 'Клоз' },
+    {
+      menu: [
+        { label: 'вопрос >> ответ', onClick: () => run('sep:>>') },
+        { label: 'понятие :: определение', onClick: () => run('sep:::') },
+        { label: 'в обе стороны <>', onClick: () => run('sep:<>') },
+        { label: 'обратная <<', onClick: () => run('sep:<<') },
+        { label: 'описание ;;', onClick: () => run('sep:;;') },
+        { label: 'ответ — вложенные >>>', onClick: () => run('sep:>>>') },
+        { label: 'список >>1.', onClick: () => run('sep:>>1.') },
+        { label: 'выбор ответа >>A)', onClick: () => run('sep:>>A)') },
+      ],
+      icon: 'card',
+      label: 'Сделать карточкой',
+    },
+    { a: 'cardsOff', icon: 'cardOff', label: 'Отключить/включить карточки блока' },
+    'sep',
+    { a: 'draw', icon: 'pen', label: 'Рукописный блок' },
+    { a: 'delete', icon: 'trash', label: 'Удалить блок' },
+    { a: 'done', icon: 'keyboard', label: 'Готово' },
+  ];
   return (
     <div className="edit-toolbar" onPointerDown={(e) => e.preventDefault()}>
-      {EDIT_TOOLS.map((t) => (
-        <button key={t.a} className="tool-btn" title={t.label} aria-label={t.label} onClick={() => api.current?.(t.a)}>
-          {t.icon ? <Icon name={t.icon} /> : <span className="tool-text">{t.text}</span>}
-        </button>
-      ))}
+      {tools.map((t, i) =>
+        t === 'sep' ? (
+          <span key={i} className="tb-sep" />
+        ) : 'menu' in t ? (
+          <MenuButton key={i} items={t.menu} label={t.label} className="tool-btn">
+            {t.icon ? <Icon name={t.icon} /> : <span className="tool-text">{t.text}</span>}
+          </MenuButton>
+        ) : (
+          <button key={i} className="tool-btn" title={t.label} aria-label={t.label} onClick={() => run(t.a)}>
+            {t.icon ? <Icon name={t.icon} /> : <span className="tool-text">{t.text}</span>}
+          </button>
+        ),
+      )}
     </div>
   );
 }
@@ -134,7 +214,7 @@ export function Outliner({ docId, highlight }: { docId: string; highlight: strin
     return m;
   }, [cards]);
 
-  // Переход из поиска: раскрываем свёрнутых предков найденного блока
+  // Переход из поиска/карточки: раскрываем свёрнутых предков найденного блока
   useEffect(() => {
     if (!highlight || !blocks) return;
     const byId = new Map(blocks.map((b) => [b.id, b]));

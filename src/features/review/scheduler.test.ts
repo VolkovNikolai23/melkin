@@ -16,7 +16,7 @@ import {
 } from './scheduler';
 
 const now = new Date(2026, 9, 17, 12, 0).getTime();
-const mk = (id: string, t = now) => newCardRow(id, 'd', parseCards('q :: a')[0], t);
+const mk = (id: string, t = now) => newCardRow(id, 'd', parseCards('q >> a')[0], t);
 
 describe('applyRating', () => {
   it('новая карточка после «Хорошо» уходит в изучение и пишет журнал', () => {
@@ -98,5 +98,13 @@ describe('formatInterval и день', () => {
     const night = new Date(2026, 9, 18, 2, 0).getTime();
     expect(dayStart(night)).toBe(new Date(2026, 9, 17, 4, 0).getTime());
     expect(dayStart(now)).toBe(new Date(2026, 9, 17, 4, 0).getTime());
+  });
+});
+
+describe('отключённые карточки', () => {
+  it('не попадают в очередь и счётчик', () => {
+    const off = { ...mk('x'), disabled: true };
+    expect(buildSession([off, mk('y')], now, 20).fresh.map((c) => c.id)).toEqual(['y#fwd']);
+    expect(countDueToday([off], now, 20).total).toBe(0);
   });
 });

@@ -3,12 +3,14 @@ import type { CardRow, Doc } from '../../db/schema';
 import { dayStart } from '../../lib/time';
 import { applyRating, newAllowance, type Grade } from './scheduler';
 
-export type Scope = { kind: 'all' } | { kind: 'doc'; id: string } | { kind: 'folder'; id: string };
+export type Scope = { kind: 'all' } | { kind: 'doc'; id: string } | { kind: 'folder'; id: string } | { kind: 'tag'; id: string };
 
 export function parseScope(s: string | null): Scope {
   if (!s) return { kind: 'all' };
-  const [kind, id] = s.split(':');
-  if ((kind === 'doc' || kind === 'folder') && id) return { kind, id };
+  const i = s.indexOf(':');
+  const kind = s.slice(0, i);
+  const id = s.slice(i + 1);
+  if ((kind === 'doc' || kind === 'folder' || kind === 'tag') && id) return { kind, id };
   return { kind: 'all' };
 }
 
@@ -30,6 +32,10 @@ export function descendantDocIds(docs: Doc[], folderId: string): Set<string> {
 
 export async function cardsInScope(scope: Scope): Promise<CardRow[]> {
   if (scope.kind === 'doc') return db.cards.where('docId').equals(scope.id).toArray();
+  if (scope.kind === 'tag') {
+    const ids = await db.blocks.where('tags').equals(scope.id.toLowerCase()).primaryKeys();
+    return db.cards.where('blockId').anyOf(ids as string[]).toArray();
+  }
   if (scope.kind === 'folder') {
     const ids = descendantDocIds(await db.docs.toArray(), scope.id);
     return db.cards.where('docId').anyOf([...ids]).toArray();

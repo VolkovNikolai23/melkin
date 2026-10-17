@@ -27,7 +27,10 @@ export function ReviewView({ scopeStr }: { scopeStr: string | null }) {
   const [answered, setAnswered] = useState(0);
   const [busy, setBusy] = useState(false);
 
-  const scopeTitle = useLiveQuery(async () => (scope.kind === 'all' ? 'Все карточки' : (await db.docs.get(scope.id))?.title ?? ''), [scopeStr]);
+  const scopeTitle = useLiveQuery(
+    async () => (scope.kind === 'all' ? 'Все карточки' : scope.kind === 'tag' ? '#' + scope.id : (await db.docs.get(scope.id))?.title ?? ''),
+    [scopeStr],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -113,7 +116,10 @@ export function ReviewView({ scopeStr }: { scopeStr: string | null }) {
       {current ? (
         <>
           <div className="review-body">
-            <CardFace key={current.id + ':' + current.reps} card={current} revealed={revealed} />
+            <CardFace key={current.id + ':' + current.reps} card={current} revealed={revealed} onReveal={() => setRevealed(true)} />
+            <button className="btn ghost small to-source" onClick={() => navigate(`doc/${current.docId}?b=${current.blockId}`)}>
+              <Icon name="note" size={18} /> Открыть в заметке
+            </button>
           </div>
           <footer className="review-foot">
             {!revealed ? (

@@ -1,55 +1,97 @@
 import type { CardKind } from '../../db/schema';
-import { findClozes, findMath, findSeparator } from '../../lib/markup';
+import { analyze, type SepKind } from '../../lib/markup';
+
+export { hashString } from '../../lib/markup';
 
 export interface ParsedCard {
   /** Стабильный ключ внутри блока: по нему карточка узнаётся после правки текста. */
   key: string;
   kind: CardKind;
-  clozeIndex?: number;
   front: string;
   back: string;
+  concept?: boolean;
+  clozeIndex?: number;
+  sub?: string;
 }
 
-/** Короткий детерминированный хэш строки (djb2). */
-export function hashString(s: string): string {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return (h >>> 0).toString(36);
+export interface ParseContext {
+  /** Текст родительского блока — нужен для описаний (;;) */
+  parentText?: string;
+}
+
+/** Теги — служебные метки блока, в тексте карточки они не нужны. */
+export function stripTags(text: string): string {
+  const { tags } = analyze(text);
+  let out = text;
+  for (const t of [...tags].reverse()) out = out.slice(0, t.start) + out.slice(t.end);
+  return out.replace(/[ \t]{2,}/g, ' ').trim();
+}
+
+/** Название понятия из текста блока: левая часть до разделителя или весь текст. */
+export function conceptName(text: string): string {
+  const { sep } = analyze(text);
+  return stripTags(sep ? text.slice(0, sep.index) : text);
+}
+
+export function separatorOf(text: string): SepKind | null {
+  return analyze(text).sep?.sep ?? null;
 }
 
 /**
- * Разбирает текст блока в карточки.
- *  - «вопрос :: ответ» — карточка вперёд;
- *  - «вопрос ;; ответ» — двусторонняя (вперёд + обратная);
- *  - «текст с {{клозами}}» — по карточке на каждый клоз.
- * Пустой ответ допустим: тогда ответом служат дочерние блоки.
+ * Разбирает текст блока в карточки (синтаксис RemNote):
+ *  - «вопрос >> ответ» — вперёд; «<<» — обратная; «<>» — в обе стороны;
+ *  - «понятие :: определение» — понятие, в обе стороны;
+ *  - «свойство ;; значение» — описание понятия-родителя: «Понятие → свойство?»;
+ *  - «вопрос >>>» — многострочный ответ из дочерних блоков;
+ *  - «вопрос >>1.» — карточка-список; «вопрос >>A)» — множественный выбор;
+ *  - «текст с {{клозами}}» — по карточке на группу ({{c1::…}} объединяет клозы).
+ * Ключи вперёд/назад одинаковы для всех видов, поэтому смена >> на :: не теряет историю.
  */
-export function parseCards(text: string): ParsedCard[] {
-  const math = findMath(text);
-  const clozes = findClozes(text, math);
-  const sep = findSeparator(text, math, clozes);
+export function parseCards(text: string, ctx: ParseContext = {}): ParsedCard[] {
+  const a = analyze(text);
 
-  if (sep) {
-    const front = text.slice(0, sep.index).trim();
-    const back = text.slice(sep.index + 2).trim();
-    if (!front) return [];
-    const cards: ParsedCard[] = [{ key: 'fwd', kind: 'forward', front, back }];
-    if (sep.sep === ';;' && back) cards.push({ key: 'rev', kind: 'reverse', front: back, back: front });
-    return cards;
+  if (a.sep) {
+    const left = stripTags(text.slice(0, a.sep.index));
+    const right = stripTags(text.slice(a.sep.index + a.sep.sep.length));
+    if (!left) return [];
+    const fwd = (front = left, back = right, extra: Partial<ParsedCard> = {}): ParsedCard => ({ key: 'fwd', kind: 'forward', front, back, ...extra });
+    const bwd = (extra: Partial<ParsedCard> = {}): ParsedCard => ({ key: 'bwd', kind: 'backward', front: right, back: left, ...extra });
+    switch (a.sep.sep) {
+      case '>>':
+        return [fwd()];
+      case '<<':
+        return right ? [bwd()] : [];
+      case '<>':
+        return right ? [fwd(), bwd()] : [fwd()];
+      case '::':
+        return right ? [fwd(left, right, { concept: true }), bwd({ concept: true })] : [fwd(left, right, { concept: true })];
+      case ';;': {
+        const parent = ctx.parentText ? conceptName(ctx.parentText) : '';
+        return [fwd(parent ? `${parent} → ${left}` : left, right)];
+      }
+      case '>>>':
+        return [fwd(left, '')];
+      case '>>1.':
+        return [{ key: 'list', kind: 'list', front: left, back: '' }];
+      case '>>A)':
+        return [{ key: 'mcq', kind: 'mcq', front: left, back: '' }];
+    }
   }
 
-  // Ключ клоза — хэш его содержимого: перестановка клозов не путает историю повторений.
-  const seen = new Map<string, number>();
-  return clozes.map((c, i) => {
-    const base = hashString(c.content.trim());
-    const n = (seen.get(base) ?? 0) + 1;
-    seen.set(base, n);
-    return {
-      key: `cloze:${base}${n > 1 ? '-' + n : ''}`,
-      kind: 'cloze' as const,
-      clozeIndex: i,
-      front: text,
-      back: c.content,
-    };
+  // Клозы: одна карточка на группу. Ключ — группа (c1) или хэш содержимого,
+  // поэтому перестановка клозов в тексте не путает историю повторений.
+  const groups = new Map<string, { index: number; contents: string[] }>();
+  a.clozes.forEach((c, i) => {
+    const g = groups.get(c.group);
+    if (g) g.contents.push(c.content);
+    else groups.set(c.group, { index: i, contents: [c.content] });
   });
+  return [...groups].map(([group, g]) => ({
+    key: `cloze:${group}`,
+    kind: 'cloze' as const,
+    front: text,
+    back: g.contents.join(' · '),
+    clozeIndex: g.index,
+    sub: group,
+  }));
 }

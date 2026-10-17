@@ -33,6 +33,16 @@ const PATHS = {
   heart: 'M12 20C5 15 3 12 3 9a4.5 4.5 0 0 1 9-1 4.5 4.5 0 0 1 9 1c0 3-2 6-9 11z',
   move: 'M12 3v18M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4',
   edit: 'M4 20h4L19 9l-4-4L4 16z',
+  pdf: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h2a1.5 1.5 0 0 1 0 3H9v-5M9 16v2',
+  calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  bold: 'M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z',
+  italic: 'M10 5h8M6 19h8M14 5l-4 14',
+  underline: 'M7 4v7a5 5 0 0 0 10 0V4M5 20h14',
+  highlight: 'M5 20h14M8 16l-2-2 9-9 4 4-9 9zM6 14l-2 4 4-2',
+  heading: 'M6 4v16M18 4v16M6 12h12',
+  listNumber: 'M10 6h10M10 12h10M10 18h10M4 5l1.5-1V9M4 15h2.5L4 18.5h3',
+  card: 'M4 6h16v12H4zM8 12h8M13 9l3 3-3 3',
+  cardOff: 'M4 6h16v12H4zM4 6l16 12',
 };
 
 export type IconName = keyof typeof PATHS;

@@ -6,9 +6,10 @@ import { dialog } from '../../components/dialog';
 import { db } from '../../db/db';
 import type { Doc, DocType } from '../../db/schema';
 import { navigate } from '../../lib/router';
-import { collectSubtree, createDoc, deleteDoc, moveDoc, renameDoc, shiftDoc, sortDocs } from './docs';
+import { beginDrag } from '../../components/dnd';
+import { collectSubtree, createDoc, deleteDoc, moveDoc, moveDocTo, renameDoc, shiftDoc, sortDocs } from './docs';
 
-const TYPE_ICON: Record<DocType, IconName> = { folder: 'folder', note: 'note', notebook: 'notebook' };
+export const TYPE_ICON: Record<DocType, IconName> = { folder: 'folder', note: 'note', notebook: 'notebook', pdf: 'pdf', daily: 'calendar' };
 
 async function create(type: DocType, parentId: string | null) {
   const doc = await createDoc(type, parentId);
@@ -76,7 +77,18 @@ function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: 
     <div>
       <div
         className={'tree-row' + (activeId === doc.id ? ' active' : '')}
+        data-drop-doc={doc.id}
         style={{ paddingLeft: 8 + depth * 16 }}
+        onPointerDown={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return;
+          beginDrag(e, {
+            attr: 'data-drop-doc',
+            id: doc.id,
+            label: doc.title,
+            canNest: (tid) => docs.find((d) => d.id === tid)?.type === 'folder',
+            onDrop: (tid, pos) => moveDocTo(doc.id, tid, pos),
+          });
+        }}
         onClick={() => {
           if (isFolder) db.docs.update(doc.id, { collapsed: !doc.collapsed });
           else {

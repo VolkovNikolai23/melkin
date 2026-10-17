@@ -104,7 +104,8 @@ export interface Session {
   fresh: CardRow[];
 }
 
-export function buildSession(cards: CardRow[], now: number, newLimitLeft: number): Session {
+export function buildSession(all: CardRow[], now: number, newLimitLeft: number): Session {
+  const cards = all.filter((c) => !c.disabled);
   const due = cards.filter((c) => !isNew(c) && c.due <= now).sort((a, b) => a.due - b.due);
   const fresh = cards
     .filter(isNew)
@@ -146,6 +147,7 @@ export function countDueToday(cards: CardRow[], now: number, newLimitLeft: numbe
   let due = 0;
   let fresh = 0;
   for (const c of cards) {
+    if (c.disabled) continue;
     if (isNew(c)) fresh++;
     else if (c.due <= now) due++;
   }

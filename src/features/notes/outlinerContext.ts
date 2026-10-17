@@ -1,9 +1,28 @@
+import type { SepKind } from '../../lib/markup';
 import { createContext, useContext, type MutableRefObject } from 'react';
 import type { Block } from '../../db/schema';
 
 export type Caret = number | 'start' | 'end';
 
-export type EditorAction = 'indent' | 'outdent' | 'up' | 'down' | 'delete' | 'draw' | 'math' | 'cloze' | 'card' | 'done';
+
+export type EditorAction =
+  | 'indent'
+  | 'outdent'
+  | 'up'
+  | 'down'
+  | 'delete'
+  | 'draw'
+  | 'math'
+  | 'cloze'
+  | 'done'
+  | 'bold'
+  | 'italic'
+  | 'underline'
+  | 'heading'
+  | 'number'
+  | 'cardsOff'
+  | `hl:${string}`
+  | `sep:${SepKind}`;
 
 export interface OutlinerCtx {
   docId: string;

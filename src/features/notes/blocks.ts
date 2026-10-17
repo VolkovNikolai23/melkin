@@ -2,16 +2,24 @@ import { db } from '../../db/db';
 import type { Block, BlockKind } from '../../db/schema';
 import { orderBetween, uid } from '../../lib/id';
 import { syncBlockCards } from '../cards/sync';
+import { extractTags } from '../../lib/markup';
 
 export const INK_WIDTH = 800;
 export const INK_DEFAULT_HEIGHT = 320;
 
-export const byOrder = (a: Block, b: Block) => a.order - b.order;
+export const byOrder = (a: Block, b: Block) => a.order - b.order || a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1);
 
+/**
+ * Соседи в порядке отображения. Если порядковые номера совпали или слишком сблизились
+ * (дробные индексы исчерпались), перенумеровываем их — иначе вставка «между» не сработает.
+ */
 async function siblings(docId: string, parentId: string | null) {
-  return (await db.blocks.where('docId').equals(docId).toArray())
-    .filter((b) => b.parentId === parentId)
-    .sort(byOrder);
+  const list = (await db.blocks.where('docId').equals(docId).toArray()).filter((b) => b.parentId === parentId).sort(byOrder);
+  if (list.some((b, i) => i > 0 && b.order - list[i - 1].order < 1e-6)) {
+    list.forEach((b, i) => (b.order = i));
+    await db.blocks.bulkUpdate(list.map((b) => ({ key: b.id, changes: { order: b.order } })));
+  }
+  return list;
 }
 
 function makeBlock(docId: string, parentId: string | null, order: number, kind: BlockKind, text = ''): Block {
@@ -23,6 +31,8 @@ function makeBlock(docId: string, parentId: string | null, order: number, kind: 
     order,
     kind,
     text,
+    tags: extractTags(text),
+    links: [],
     ink: kind === 'ink' ? { width: INK_WIDTH, height: INK_DEFAULT_HEIGHT, strokes: [] } : undefined,
     createdAt: now,
     updatedAt: now,
@@ -38,6 +48,7 @@ export async function appendBlock(docId: string, kind: BlockKind = 'text', text 
   const b = makeBlock(docId, null, orderBetween(sibs.at(-1)?.order, undefined), kind, text);
   await db.blocks.add(b);
   await touch(docId);
+  if (text) await syncBlockCards(b.id);
   return b;
 }
 
@@ -50,7 +61,7 @@ export async function insertAfter(block: Block, text = '', kind: BlockKind = 'te
   } else {
     const sibs = await siblings(block.docId, block.parentId);
     const i = sibs.findIndex((s) => s.id === block.id);
-    nb = makeBlock(block.docId, block.parentId, orderBetween(block.order, sibs[i + 1]?.order), kind, text);
+    nb = makeBlock(block.docId, block.parentId, orderBetween(sibs[i].order, sibs[i + 1]?.order), kind, text);
   }
   await db.blocks.add(nb);
   await touch(block.docId);
@@ -61,7 +72,7 @@ export async function insertAfter(block: Block, text = '', kind: BlockKind = 'te
 export async function insertBefore(block: Block, text = ''): Promise<Block> {
   const sibs = await siblings(block.docId, block.parentId);
   const i = sibs.findIndex((s) => s.id === block.id);
-  const nb = makeBlock(block.docId, block.parentId, orderBetween(sibs[i - 1]?.order, block.order), 'text', text);
+  const nb = makeBlock(block.docId, block.parentId, orderBetween(sibs[i - 1]?.order, sibs[i].order), 'text', text);
   await db.blocks.add(nb);
   return nb;
 }
@@ -69,7 +80,7 @@ export async function insertBefore(block: Block, text = ''): Promise<Block> {
 export async function setText(id: string, text: string) {
   const b = await db.blocks.get(id);
   if (!b || b.text === text) return;
-  await db.blocks.update(id, { text, updatedAt: Date.now() });
+  await db.blocks.update(id, { text, tags: extractTags(text), updatedAt: Date.now() });
   await touch(b.docId);
   await syncBlockCards(id);
 }
@@ -84,6 +95,7 @@ export async function indent(block: Block): Promise<boolean> {
     await db.blocks.update(block.id, { parentId: prev.id, order: orderBetween(kids.at(-1)?.order, undefined) });
     await db.blocks.update(prev.id, { collapsed: false });
   });
+  if (block.text.includes(';;')) await syncBlockCards(block.id);
   return true;
 }
 
@@ -93,7 +105,8 @@ export async function outdent(block: Block): Promise<boolean> {
   if (!parent) return false;
   const sibs = await siblings(block.docId, parent.parentId);
   const i = sibs.findIndex((s) => s.id === parent.id);
-  await db.blocks.update(block.id, { parentId: parent.parentId, order: orderBetween(parent.order, sibs[i + 1]?.order) });
+  await db.blocks.update(block.id, { parentId: parent.parentId, order: orderBetween(sibs[i].order, sibs[i + 1]?.order) });
+  if (block.text.includes(';;')) await syncBlockCards(block.id);
   return true;
 }
 
@@ -105,7 +118,7 @@ export async function moveBlock(block: Block, dir: -1 | 1) {
   const other = sibs[j];
   await db.transaction('rw', db.blocks, async () => {
     await db.blocks.update(block.id, { order: other.order });
-    await db.blocks.update(other.id, { order: block.order });
+    await db.blocks.update(other.id, { order: sibs[i].order });
   });
 }
 
@@ -123,6 +136,36 @@ export async function deleteBlock(block: Block) {
     await db.blocks.bulkDelete(ids);
   });
   await touch(block.docId);
+}
+
+export function setBlockProps(id: string, patch: Partial<Pick<Block, 'heading' | 'list' | 'cardsOff'>>) {
+  return db.blocks.update(id, { ...patch, updatedAt: Date.now() });
+}
+
+/** Перенос блока (перетаскиванием): перед/после другого блока или внутрь него. */
+export async function moveBlockTo(id: string, targetId: string, pos: 'before' | 'after' | 'inside') {
+  if (id === targetId) return;
+  const block = await db.blocks.get(id);
+  const target = await db.blocks.get(targetId);
+  if (!block || !target || block.docId !== target.docId) return;
+  if ((await subtreeIds(block)).includes(targetId)) return; // нельзя внутрь самого себя
+  let parentId: string | null;
+  let order: number;
+  if (pos === 'inside') {
+    const kids = (await siblings(block.docId, target.id)).filter((b) => b.id !== id);
+    parentId = target.id;
+    order = orderBetween(kids.at(-1)?.order, undefined);
+    await db.blocks.update(target.id, { collapsed: false });
+  } else {
+    const sibs = (await siblings(block.docId, target.parentId)).filter((b) => b.id !== id);
+    const i = sibs.findIndex((s) => s.id === target.id);
+    const t = sibs[i].order; // свежий порядок (после возможной перенумерации)
+    parentId = target.parentId;
+    order = pos === 'before' ? orderBetween(sibs[i - 1]?.order, t) : orderBetween(t, sibs[i + 1]?.order);
+  }
+  await db.blocks.update(id, { parentId, order, updatedAt: Date.now() });
+  // описание (;;) зависит от родителя — пересобираем карточки
+  await syncBlockCards(id);
 }
 
 export function setCollapsed(id: string, collapsed: boolean) {

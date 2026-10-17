@@ -11,8 +11,11 @@ import {
   insertBefore,
   moveBlock,
   outdent,
+  setBlockProps,
   setText as saveText,
 } from './blocks';
+import { syncBlockCards } from '../cards/sync';
+import { analyze } from '../../lib/markup';
 import { useOutliner, type Caret, type EditorAction } from './outlinerContext';
 
 const DRAW_COMMANDS = ['/draw', '/рисунок', '/рис'];
@@ -155,17 +158,51 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
       case 'cloze':
         wrapSelection('{{', '}}');
         break;
-      case 'card': {
-        const v = textRef.current;
-        if (!/::|;;/.test(v)) {
-          setLocal(v.trimEnd() + ' :: ');
+      case 'bold':
+        wrapSelection('**', '**');
+        break;
+      case 'italic':
+        wrapSelection('*', '*');
+        break;
+      case 'underline':
+        wrapSelection('__', '__');
+        break;
+      case 'heading': {
+        const h = blockRef.current.heading;
+        await setBlockProps(block.id, { heading: h === 3 ? undefined : (((h ?? 0) + 1) as 1 | 2 | 3) });
+        requestAnimationFrame(() => ta && autosize(ta));
+        break;
+      }
+      case 'number':
+        await setBlockProps(block.id, { list: blockRef.current.list === 'number' ? undefined : 'number' });
+        break;
+      case 'cardsOff':
+        await flush();
+        await setBlockProps(block.id, { cardsOff: !blockRef.current.cardsOff || undefined });
+        await syncBlockCards(block.id);
+        break;
+      default:
+        if (a.startsWith('hl:')) {
+          const color = a.slice(3);
+          wrapSelection(color === 'yellow' ? '==' : `=={${color}}`, '==');
+        } else if (a.startsWith('sep:')) {
+          // Ставим разделитель карточки (или меняем существующий)
+          const sep = a.slice(4);
+          const v = textRef.current;
+          const cur = analyze(v).sep;
+          const trailing = ['>>>', '>>1.', '>>A)'].includes(sep);
+          const nv = cur
+            ? v.slice(0, cur.index).trimEnd() + ' ' + sep + (trailing ? '' : ' ' + v.slice(cur.index + cur.sep.length).trimStart())
+            : v.trimEnd() + ' ' + sep + (trailing ? '' : ' ');
+          setLocal(trailing ? nv.trimEnd() : nv);
           requestAnimationFrame(() => {
-            ta?.setSelectionRange(textRef.current.length, textRef.current.length);
-            if (ta) autosize(ta);
+            if (!ta) return;
+            ta.focus();
+            ta.setSelectionRange(textRef.current.length, textRef.current.length);
+            autosize(ta);
           });
         }
         break;
-      }
       case 'done':
         ta?.blur();
         break;
@@ -195,14 +232,13 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
         ctx.setEditing(null);
         return;
       }
-      keepKeyboard();
       if (s === 0 && end === 0 && v !== '') {
-        // курсор в начале — вставляем пустой блок над текущим
+        // курсор в начале — вставляем пустой блок над текущим (фокус остаётся в этом же поле)
         await flush();
         await insertBefore(block);
-        ctx.setEditing({ id: block.id, caret: 'start' });
         return;
       }
+      keepKeyboard();
       const before = v.slice(0, s);
       const after = v.slice(end);
       setLocal(before);
@@ -264,6 +300,12 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
       run(e.key === 'ArrowUp' ? 'up' : 'down');
       return;
     }
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && ['b', 'i', 'u', 'и', 'ш', 'г'].includes(e.key.toLowerCase())) {
+      e.preventDefault();
+      const k = e.key.toLowerCase();
+      run(k === 'b' || k === 'и' ? 'bold' : k === 'i' || k === 'ш' ? 'italic' : 'underline');
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       ta.blur();
@@ -273,14 +315,23 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
   return (
     <textarea
       ref={ref}
-      className="block-input"
+      className={'block-input' + (block.heading ? ` h${block.heading}` : '')}
       value={text}
       rows={1}
       spellCheck
       autoCapitalize="sentences"
       placeholder="Текст, $формула$, вопрос :: ответ, {{клоз}}, /draw"
       onChange={(e) => {
-        setLocal(e.target.value);
+        // Быстрый ввод как в Markdown: «# » → H1, «## » → H2, «### » → H3, «1. » → нумерация
+        const ta = e.target;
+        const md = ta.value.match(/^(#{1,3}|1\.) /);
+        if (md && !textRef.current.startsWith(md[0])) {
+          if (md[1] === '1.') setBlockProps(block.id, { list: 'number' });
+          else setBlockProps(block.id, { heading: md[1].length as 1 | 2 | 3 });
+          const caretPos = Math.max(0, ta.selectionStart - md[0].length);
+          setLocal(ta.value.slice(md[0].length));
+          requestAnimationFrame(() => ta.setSelectionRange(caretPos, caretPos));
+        } else setLocal(ta.value);
         autosize(e.target);
         window.clearTimeout(timer.current);
         timer.current = window.setTimeout(flush, 600);

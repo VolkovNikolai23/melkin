@@ -1,4 +1,8 @@
-export type DocType = 'folder' | 'note' | 'notebook';
+// Схема данных. Поля для всех этапов (картинки, PDF, ссылки, порталы и т. д.)
+// заложены сразу, чтобы дальше не переделывать таблицы. Необязательные поля
+// появляются у записей по мере того, как соответствующие функции начинают ими пользоваться.
+
+export type DocType = 'folder' | 'note' | 'notebook' | 'pdf' | 'daily';
 
 export interface Doc {
   id: string;
@@ -8,6 +12,12 @@ export interface Doc {
   order: number;
   /** Свёрнута ли папка в боковой панели */
   collapsed?: boolean;
+  /** Ежедневная заметка: дата в формате YYYY-MM-DD */
+  dailyDate?: string;
+  /** Документ-шаблон (вставляется через /template) */
+  isTemplate?: boolean;
+  /** Для PDF-документа — ссылка на файл в таблице files */
+  fileId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -30,7 +40,32 @@ export interface InkData {
   strokes: Stroke[];
 }
 
-export type BlockKind = 'text' | 'ink';
+export type BlockKind = 'text' | 'ink' | 'image' | 'code' | 'portal' | 'pdf-clip';
+
+/** Прямоугольник в долях от размеров картинки/страницы (0…1) */
+export interface Rect {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface ImageData {
+  fileId: string;
+  width: number;
+  height: number;
+  /** Прямоугольники image occlusion; каждый — отдельная карточка */
+  occlusions?: Rect[];
+}
+
+export interface PdfRef {
+  docId: string;
+  page: number;
+  rects?: Rect[];
+  /** Если вырезана область страницы как картинка */
+  fileId?: string;
+}
 
 export interface Block {
   id: string;
@@ -40,9 +75,39 @@ export interface Block {
   kind: BlockKind;
   text: string;
   collapsed?: boolean;
+  /** Заголовок H1–H3 */
+  heading?: 1 | 2 | 3;
+  /** Как показывать дочерние блоки: маркеры (по умолчанию) или нумерация */
+  list?: 'number';
+  /** Свойства блока: поле → значение */
+  props?: Record<string, string>;
+  /** Нормализованные теги (#тег), индексируются для фильтра */
+  tags: string[];
+  /** id документов/блоков, на которые ссылается текст ([[...]]) — для обратных ссылок */
+  links: string[];
+  /** Портал: id оригинального блока */
+  portalOf?: string;
   ink?: InkData;
+  image?: ImageData;
+  code?: { lang: string };
+  pdfRef?: PdfRef;
+  /** Карточки блока временно отключены (текст и история сохраняются) */
+  cardsOff?: boolean;
   createdAt: number;
   updatedAt: number;
+}
+
+export type FileKind = 'image' | 'pdf';
+
+/** Двоичные данные (картинки, PDF) хранятся отдельно от блоков как Blob. */
+export interface FileRow {
+  id: string;
+  kind: FileKind;
+  mime: string;
+  name: string;
+  size: number;
+  blob: Blob;
+  createdAt: number;
 }
 
 export type PageBackground = 'blank' | 'grid' | 'lines';
@@ -57,7 +122,23 @@ export interface Page {
   updatedAt: number;
 }
 
-export type CardKind = 'forward' | 'reverse' | 'cloze';
+/** Слой аннотаций PDF: сам файл не меняется. */
+export interface Annotation {
+  id: string;
+  docId: string;
+  page: number;
+  kind: 'highlight' | 'ink';
+  color: string;
+  rects?: Rect[];
+  text?: string;
+  strokes?: Stroke[];
+  /** Блок, созданный из этого выделения */
+  blockId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type CardKind = 'forward' | 'backward' | 'cloze' | 'list' | 'mcq' | 'occlusion';
 
 /** Карточка + состояние FSRS (даты хранятся как миллисекунды). */
 export interface CardRow {
@@ -65,9 +146,16 @@ export interface CardRow {
   blockId: string;
   docId: string;
   kind: CardKind;
+  /** Для клоза — номер группы по порядку в тексте; для occlusion — номер прямоугольника */
   clozeIndex?: number;
+  /** Ключ подкарточки (группа клоза, id прямоугольника) */
+  sub?: string;
   front: string;
   back: string;
+  /** Карточка-понятие (::) — левая часть выделяется стилем */
+  concept?: boolean;
+  /** Карточка отключена пользователем — не попадает в очередь */
+  disabled?: boolean;
   createdAt: number;
   due: number;
   stability: number;

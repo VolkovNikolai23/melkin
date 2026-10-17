@@ -16,6 +16,20 @@ export function keepKeyboard() {
   }
   el.value = '';
   el.focus({ preventScroll: true });
+  // Страховка: если новый блок так и не забрал фокус, возвращаем его в активное поле
+  // вместе с тем, что пользователь успел набрать.
+  const keeper = el;
+  setTimeout(() => {
+    if (document.activeElement !== keeper) return;
+    const ta = document.querySelector<HTMLTextAreaElement>('textarea.block-input');
+    if (!ta) return;
+    const typed = takeKeeperText();
+    ta.focus({ preventScroll: true });
+    if (typed) {
+      ta.setRangeText(typed, ta.selectionStart, ta.selectionEnd, 'end');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }, 300);
 }
 
 /** Текст, который пользователь успел набрать, пока новый блок создавался (его нельзя терять). */

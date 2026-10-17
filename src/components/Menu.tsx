@@ -6,11 +6,13 @@ export interface MenuItem {
   label: string;
   icon?: IconName;
   danger?: boolean;
+  /** Цветной кружок вместо иконки (для выбора цвета выделения) */
+  swatch?: string;
   onClick: () => void;
 }
 
 /** Кнопка «⋯» с выпадающим меню (портал, чтобы не обрезалось прокруткой). */
-export function MenuButton({ items, label = 'Действия', children }: { items: MenuItem[]; label?: string; children?: ReactNode }) {
+export function MenuButton({ items, label = 'Действия', children, className = 'icon-btn small' }: { items: MenuItem[]; label?: string; children?: ReactNode; className?: string }) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -40,8 +42,9 @@ export function MenuButton({ items, label = 'Действия', children }: { it
     <>
       <button
         ref={btn}
-        className="icon-btn small"
+        className={className}
         aria-label={label}
+        title={label}
         onClick={(e) => {
           e.stopPropagation();
           setOpen((o) => !o);
@@ -51,7 +54,8 @@ export function MenuButton({ items, label = 'Действия', children }: { it
       </button>
       {open &&
         createPortal(
-          <div ref={menu} className="menu" style={{ top: pos.top, left: pos.left }}>
+          // preventDefault — чтобы меню не забирало фокус у редактируемого блока
+          <div ref={menu} className="menu" style={{ top: pos.top, left: pos.left }} onPointerDown={(e) => e.preventDefault()}>
             {items.map((it) => (
               <button
                 key={it.label}
@@ -63,6 +67,7 @@ export function MenuButton({ items, label = 'Действия', children }: { it
                 }}
               >
                 {it.icon && <Icon name={it.icon} size={18} />}
+                {it.swatch && <span className={'menu-swatch hl-' + it.swatch} />}
                 {it.label}
               </button>
             ))}

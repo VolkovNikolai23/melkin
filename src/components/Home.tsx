@@ -3,6 +3,7 @@ import { db } from '../db/db';
 import { BACKUP_REMIND_DAYS, getLastBackup } from '../db/backup';
 import { createDoc, DOC_LABEL } from '../features/notes/docs';
 import { navigate } from '../lib/router';
+import { TYPE_ICON } from '../features/notes/Sidebar';
 import { plural } from '../lib/time';
 import { Icon } from './Icon';
 import { useDueCount } from './useDue';
@@ -55,7 +56,7 @@ export function Home() {
         <div className="doc-list">
           {recent?.map((d) => (
             <button key={d.id} className="doc-card" onClick={() => navigate(`doc/${d.id}`)}>
-              <Icon name={d.type === 'note' ? 'note' : 'notebook'} />
+              <Icon name={TYPE_ICON[d.type]} />
               <span>{d.title}</span>
               <small>{DOC_LABEL[d.type]}</small>
             </button>
@@ -74,18 +75,28 @@ export function Home() {
       <section className="cheatsheet">
         <h2 className="section-title">Шпаргалка</h2>
         <dl>
-          <dt>вопрос :: ответ</dt>
-          <dd>карточка; вложенные блоки тоже входят в ответ</dd>
-          <dt>термин ;; определение</dt>
-          <dd>двусторонняя карточка</dd>
-          <dt>{'Ранг — это {{размерность образа}}'}</dt>
-          <dd>клоз: каждый {'{{…}}'} — отдельная карточка</dd>
-          <dt>$x^2$ и $$\int f$$</dt>
-          <dd>формулы KaTeX (строчная и блочная)</dd>
+          <dt>вопрос &gt;&gt; ответ</dt>
+          <dd>карточка вперёд (&lt;&lt; — обратная, &lt;&gt; — в обе стороны)</dd>
+          <dt>понятие :: определение</dt>
+          <dd>понятие: карточки в обе стороны</dd>
+          <dt>свойство ;; значение</dt>
+          <dd>описание понятия-родителя: «Понятие → свойство?»</dd>
+          <dt>вопрос &gt;&gt;&gt; · &gt;&gt;1. · &gt;&gt;A)</dt>
+          <dd>ответ — вложенные блоки · список по пунктам · выбор ответа (первый — верный)</dd>
+          <dt>{'{{скрыто}} · {{c1::…}}'}</dt>
+          <dd>клоз; c1, c2 объединяют клозы в одну карточку</dd>
+          <dt>$x^2$ · $$\int f$$</dt>
+          <dd>формулы KaTeX</dd>
+          <dt>**жирный** *курсив* __подчёркнутый__ ==выделение==</dt>
+          <dd>форматирование (или ⌘B / ⌘I / ⌘U и панель внизу)</dd>
+          <dt># / ## / ### · 1.</dt>
+          <dd>заголовки H1–H3 · нумерованный пункт</dd>
+          <dt>#тег · [[Документ]]</dt>
+          <dd>тег и ссылка на документ</dd>
           <dt>/draw</dt>
           <dd>рукописный блок для Apple Pencil</dd>
           <dt>Enter · Shift+Enter · Tab · Shift+Tab</dt>
-          <dd>новый блок · перенос строки · вложить · вынести</dd>
+          <dd>новый блок · перенос строки · вложить · вынести. Удерживайте маркер блока, чтобы перетащить</dd>
         </dl>
       </section>
     </div>

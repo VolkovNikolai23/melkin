@@ -7,6 +7,7 @@ import { navigate } from '../../lib/router';
 import { NotebookView } from '../ink/NotebookView';
 import { createDoc, DOC_LABEL, renameDoc, sortDocs } from './docs';
 import { Outliner } from './Outliner';
+import { TYPE_ICON } from './Sidebar';
 
 function TitleInput({ doc }: { doc: Doc }) {
   const [title, setTitle] = useState(doc.title);
@@ -59,7 +60,7 @@ function FolderView({ doc }: { doc: Doc }) {
       <div className="doc-list">
         {(kids ?? []).sort(sortDocs).map((d) => (
           <button key={d.id} className="doc-card" onClick={() => navigate(`doc/${d.id}`)}>
-            <Icon name={d.type === 'folder' ? 'folder' : d.type === 'note' ? 'note' : 'notebook'} />
+            <Icon name={TYPE_ICON[d.type]} />
             <span>{d.title}</span>
             <small>{DOC_LABEL[d.type]}</small>
           </button>
@@ -78,7 +79,8 @@ function FolderView({ doc }: { doc: Doc }) {
 }
 
 export function DocPage({ id, highlight }: { id: string; highlight: string | null }) {
-  const doc = useLiveQuery(() => db.docs.get(id), [id]);
+  // null — документа нет (удалён); undefined — ещё загружается
+  const doc = useLiveQuery(() => db.docs.get(id).then((d) => d ?? null), [id]);
   const cardsDue = useLiveQuery(() => db.cards.where('docId').equals(id).count(), [id]);
   if (doc === undefined) return <div className="page-pad muted">Загрузка…</div>;
   if (doc === null) return <div className="page-pad muted">Документ не найден.</div>;

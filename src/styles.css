@@ -1208,3 +1208,222 @@ mark {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Форматирование ---------- */
+:root {
+  --hl-yellow: #fbefa1;
+  --hl-green: #c9f0cf;
+  --hl-blue: #cfe3fb;
+  --hl-pink: #f9d3e6;
+  --hl-red: #f8cfcb;
+  --hl-purple: #e2d8fb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hl-yellow: #5c5120;
+    --hl-green: #24502e;
+    --hl-blue: #23415f;
+    --hl-pink: #5a2a43;
+    --hl-red: #5f2a26;
+    --hl-purple: #3f3266;
+  }
+}
+mark.hl-yellow,
+.menu-swatch.hl-yellow {
+  background: var(--hl-yellow);
+}
+mark.hl-green,
+.menu-swatch.hl-green {
+  background: var(--hl-green);
+}
+mark.hl-blue,
+.menu-swatch.hl-blue {
+  background: var(--hl-blue);
+}
+mark.hl-pink,
+.menu-swatch.hl-pink {
+  background: var(--hl-pink);
+}
+mark.hl-red,
+.menu-swatch.hl-red {
+  background: var(--hl-red);
+}
+mark.hl-purple,
+.menu-swatch.hl-purple {
+  background: var(--hl-purple);
+}
+mark[class^='hl-'] {
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.menu-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+.block-row.h1 .block-text,
+.block-input.h1,
+.h1 {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 700;
+}
+.block-row.h2 .block-text,
+.block-input.h2,
+.h2 {
+  font-size: 23px;
+  line-height: 32px;
+  font-weight: 650;
+}
+.block-row.h3 .block-text,
+.block-input.h3,
+.h3 {
+  font-size: 19px;
+  line-height: 28px;
+  font-weight: 600;
+}
+.block-row.h1 .bullet {
+  height: 46px;
+}
+.block-row.h2 .bullet {
+  height: 42px;
+}
+.bullet {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.bullet .num {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.concept {
+  font-weight: 650;
+}
+.wikilink {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  cursor: pointer;
+}
+.wikilink::before {
+  content: '[[';
+  opacity: 0.35;
+}
+.wikilink::after {
+  content: ']]';
+  opacity: 0.35;
+}
+.tag {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  padding: 0 5px;
+  font-size: 0.92em;
+  cursor: pointer;
+}
+.card-badge.off {
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+/* ---------- Перетаскивание ---------- */
+body.dragging {
+  cursor: grabbing;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 300;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow);
+  font-size: 15px;
+  pointer-events: none;
+}
+.drag-source {
+  opacity: 0.4;
+}
+.drop-before {
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+.drop-after {
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+.drop-inside {
+  background: var(--accent-soft) !important;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.tree-row {
+  -webkit-touch-callout: none;
+}
+
+/* ---------- Карточки ---------- */
+.to-source {
+  margin-top: 28px;
+}
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 10px 16px;
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 18px;
+}
+.choice:disabled {
+  opacity: 1;
+}
+.choice:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.choice.correct {
+  border-color: var(--good);
+  background: color-mix(in srgb, var(--good) 14%, var(--surface));
+}
+.choice.wrong {
+  border-color: var(--again);
+  background: color-mix(in srgb, var(--again) 14%, var(--surface));
+}
+.choice-letter {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  font-weight: 600;
+  font-size: 15px;
+}
+.list-answer {
+  padding-left: 28px;
+  margin-bottom: 12px;
+}

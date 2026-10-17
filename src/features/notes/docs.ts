@@ -2,7 +2,7 @@ import { db } from '../../db/db';
 import type { Doc, DocType } from '../../db/schema';
 import { uid } from '../../lib/id';
 
-export const DOC_LABEL: Record<DocType, string> = { folder: 'Папка', note: 'Заметка', notebook: 'Тетрадь' };
+export const DOC_LABEL: Record<DocType, string> = { folder: 'Папка', note: 'Заметка', notebook: 'Тетрадь', pdf: 'PDF', daily: 'Ежедневная заметка' };
 
 export async function createDoc(type: DocType, parentId: string | null, title?: string): Promise<Doc> {
   const now = Date.now();
@@ -74,4 +74,23 @@ export async function shiftDoc(id: string, dir: -1 | 1) {
 
 export function sortDocs(a: Doc, b: Doc) {
   return a.order - b.order || a.createdAt - b.createdAt;
+}
+
+/** Перенос документа перетаскиванием: перед/после другого или внутрь папки. */
+export async function moveDocTo(id: string, targetId: string, pos: 'before' | 'after' | 'inside') {
+  if (id === targetId) return;
+  const docs = await db.docs.toArray();
+  const target = docs.find((d) => d.id === targetId);
+  if (!target || collectSubtree(docs, id).includes(targetId)) return;
+  if (pos === 'inside') {
+    if (target.type !== 'folder') return;
+    return moveDoc(id, target.id);
+  }
+  const parentId = target.parentId;
+  const sibs = docs.filter((d) => d.parentId === parentId && d.id !== id).sort(sortDocs);
+  const i = sibs.findIndex((d) => d.id === targetId);
+  sibs.splice(pos === 'before' ? i : i + 1, 0, { id } as Doc);
+  await db.transaction('rw', db.docs, () =>
+    Promise.all(sibs.map((d, k) => db.docs.update(d.id, d.id === id ? { order: k, parentId } : { order: k }))),
+  );
 }
