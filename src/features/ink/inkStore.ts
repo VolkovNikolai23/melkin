@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { MARKER_COLORS, PEN_COLORS } from './geometry';
 
-export type Tool = 'pen' | 'marker' | 'eraser';
+export type Tool = 'pen' | 'marker' | 'eraser' | 'lasso';
 
 export interface ActiveCanvas {
   id: string;

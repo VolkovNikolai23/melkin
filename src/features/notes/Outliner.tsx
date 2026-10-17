@@ -129,7 +129,17 @@ export function BlockItem({ block }: { block: Block }) {
           ) : editing ? (
             <BlockEditor block={block} caret={ctx.editing!.caret} />
           ) : (
-            <div className="block-text" onClick={startEdit}>
+            <div
+              className="block-text"
+              onClick={startEdit}
+              onPointerDown={(e) => {
+                // Scribble: касание кончиком Pencil сразу открывает поле ввода,
+                // чтобы рукописный текст iPadOS попал в блок
+                if (e.pointerType === 'pen' && !(e.target as HTMLElement).closest('[data-link], [data-tag]')) {
+                  ctx.setEditing({ id: block.id, caret: 'end' });
+                }
+              }}
+            >
               <RenderedText text={block.text} />
             </div>
           )}

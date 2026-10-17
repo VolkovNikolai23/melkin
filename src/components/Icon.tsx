@@ -52,6 +52,7 @@ const PATHS = {
   tag: 'M4 4h7l9 9-7 7-9-9zM8 8h.01',
   today: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M12 13v4M10 15h4',
   table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14',
+  lasso: 'M12 4c5 0 8 2.5 8 5.5S17 15 12 15s-8-2.5-8-5.5S7 4 12 4zM7 14c-1 2 0 4 2 4s2 2 0 3',
   backlink: 'M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6M4 20l6-6M4 15v5h5',
 };
 

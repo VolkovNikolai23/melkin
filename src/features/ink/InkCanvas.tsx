@@ -1,8 +1,21 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PageBackground, Stroke } from '../../db/schema';
 import { uid } from '../../lib/id';
-import { hitStroke, livePath, MARKER_SIZE, PEN_SIZES, strokePath, strokesBottom } from './geometry';
-import { inkStore } from './inkStore';
+import { Icon } from '../../components/Icon';
+import {
+  duplicateStrokes,
+  hitStroke,
+  livePath,
+  MARKER_SIZE,
+  moveStrokes,
+  PEN_SIZES,
+  recolorStrokes,
+  selectByLasso,
+  strokePath,
+  strokesBBox,
+  strokesBottom,
+} from './geometry';
+import { inkStore, useInk } from './inkStore';
 
 interface Props {
   id: string;
@@ -21,7 +34,11 @@ interface Props {
 
 interface Drawing {
   pointerId: number;
-  mode: 'draw' | 'erase';
+  mode: 'draw' | 'erase' | 'lasso' | 'move';
+  /** Для переноса выделения: точка начала и текущий сдвиг */
+  start?: [number, number];
+  dx?: number;
+  dy?: number;
   flat: number[];
   tool: 'pen' | 'marker';
   color: string;
@@ -41,12 +58,20 @@ function scrollParent(el: Element | null): HTMLElement {
   return (document.scrollingElement as HTMLElement) ?? document.body;
 }
 
-const StrokePaths = memo(function StrokePaths({ strokes }: { strokes: Stroke[] }) {
+const StrokePaths = memo(function StrokePaths({ strokes, halo }: { strokes: Stroke[]; halo?: boolean }) {
   // маркер рисуем под чернилами, как настоящий текстовыделитель
   const markers = strokes.filter((s) => s.tool === 'marker');
   const pens = strokes.filter((s) => s.tool !== 'marker');
   return (
     <>
+      {/* подсветка выделенных лассо штрихов */}
+      {halo && (
+        <g opacity={0.35}>
+          {strokes.map((s) => (
+            <path key={'h' + s.id} d={strokePath(s)} fill="none" stroke="var(--accent)" strokeWidth={8} strokeLinejoin="round" />
+          ))}
+        </g>
+      )}
       <g opacity={0.4}>
         {markers.map((s) => (
           <path key={s.id} d={strokePath(s)} fill={fillOf(s.color)} />
@@ -72,6 +97,15 @@ export function InkCanvas({ id, width, height, strokes: propStrokes, background 
   const scroller = useRef<HTMLElement | null>(null);
   const raf = useRef(0);
   const patternId = useId().replace(/:/g, '');
+  const ink = useInk();
+  const lassoRef = useRef<SVGPathElement>(null);
+  const selGroupRef = useRef<SVGGElement>(null);
+  const [selection, setSelection] = useState<string[]>([]);
+
+  // Выделение лассо живёт, только пока выбран инструмент «лассо»
+  useEffect(() => {
+    if (ink.tool !== 'lasso') setSelection([]);
+  }, [ink.tool]);
 
   // Внешние изменения (из БД) принимаем, только если пользователь сейчас не рисует
   // и не менял холст только что (иначе «эхо» сохранения затрёт свежий штрих).
@@ -182,24 +216,50 @@ export function InkCanvas({ id, width, height, strokes: propStrokes, background 
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (drawing.current) return;
     e.preventDefault();
-    svgRef.current!.setPointerCapture(e.pointerId);
-    const ink = inkStore.get();
+    try {
+      svgRef.current!.setPointerCapture(e.pointerId);
+    } catch {
+      /* указатель уже отпущен — рисуем без захвата */
+    }
+    const tools = inkStore.get();
     const [x, y] = toLocal(e);
     const real = e.pointerType === 'pen';
     const p = real ? Math.max(e.pressure, 0.05) : 0.5;
-    const tool = ink.tool === 'marker' ? 'marker' : 'pen';
+    const tool = tools.tool === 'marker' ? 'marker' : 'pen';
+    if (tools.tool === 'lasso') {
+      // Касание внутри рамки выделения — переносим, иначе — новое лассо
+      const box = selBox;
+      const inside = box && x >= box.x - 12 && x <= box.x + box.w + 12 && y >= box.y - 12 && y <= box.y + box.h + 12;
+      drawing.current = {
+        pointerId: e.pointerId,
+        mode: inside ? 'move' : 'lasso',
+        start: [x, y],
+        dx: 0,
+        dy: 0,
+        flat: [x, y],
+        tool,
+        color: '',
+        size: 0,
+        real,
+        before: strokesRef.current,
+        erased: false,
+      };
+      if (!inside) setSelection([]);
+      register();
+      return;
+    }
     drawing.current = {
       pointerId: e.pointerId,
-      mode: ink.tool === 'eraser' ? 'erase' : 'draw',
+      mode: tools.tool === 'eraser' ? 'erase' : 'draw',
       flat: [x, y, p],
       tool,
-      color: tool === 'marker' ? ink.markerColor : ink.penColor,
-      size: tool === 'marker' ? MARKER_SIZE : PEN_SIZES[ink.penSize] ?? PEN_SIZES[1],
+      color: tool === 'marker' ? tools.markerColor : tools.penColor,
+      size: tool === 'marker' ? MARKER_SIZE : PEN_SIZES[tools.penSize] ?? PEN_SIZES[1],
       real,
       before: strokesRef.current,
       erased: false,
     };
-    if (ink.tool === 'eraser') eraseAt(x, y);
+    if (tools.tool === 'eraser') eraseAt(x, y);
     else if (liveRef.current) {
       liveRef.current.setAttribute('fill', fillOf(drawing.current.color));
       liveRef.current.setAttribute('opacity', tool === 'marker' ? '0.4' : '1');
@@ -227,6 +287,18 @@ export function InkCanvas({ id, width, height, strokes: propStrokes, background 
     const d = drawing.current;
     if (!d || d.pointerId !== e.pointerId) return;
     const events = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent];
+    if (d.mode === 'lasso' || d.mode === 'move') {
+      const [x, y] = toLocal(e);
+      if (d.mode === 'lasso') {
+        d.flat.push(x, y);
+        lassoRef.current?.setAttribute('d', 'M' + d.flat.join(' ') + 'Z');
+      } else {
+        d.dx = x - d.start![0];
+        d.dy = y - d.start![1];
+        selGroupRef.current?.setAttribute('transform', `translate(${d.dx} ${d.dy})`);
+      }
+      return;
+    }
     for (const ev of events.length ? events : [e.nativeEvent]) {
       const [x, y] = toLocal(ev);
       if (d.mode === 'erase') eraseAt(x, y);
@@ -246,6 +318,23 @@ export function InkCanvas({ id, width, height, strokes: propStrokes, background 
     if (raf.current) cancelAnimationFrame(raf.current);
     raf.current = 0;
     liveRef.current?.setAttribute('d', '');
+    if (d.mode === 'lasso') {
+      lassoRef.current?.setAttribute('d', '');
+      setSelection(selectByLasso(strokesRef.current, d.flat));
+      register();
+      return;
+    }
+    if (d.mode === 'move') {
+      selGroupRef.current?.removeAttribute('transform');
+      if (Math.hypot(d.dx ?? 0, d.dy ?? 0) > 1) {
+        const r = moveStrokes(strokesRef.current, selection, d.dx!, d.dy!, uid);
+        commit(r.strokes, d.before);
+        setSelection(r.ids);
+        onStrokeEnd?.(strokesBottom(r.strokes.filter((x) => r.ids.includes(x.id))));
+      }
+      register();
+      return;
+    }
     if (d.mode === 'erase') {
       if (d.erased) commit(strokesRef.current, d.before);
     } else {
@@ -256,6 +345,23 @@ export function InkCanvas({ id, width, height, strokes: propStrokes, background 
     }
     register();
   };
+
+  const selSet = useMemo(() => new Set(selection), [selection]);
+  const selected = useMemo(() => strokes.filter((x) => selSet.has(x.id)), [strokes, selSet]);
+  const rest = useMemo(() => (selSet.size ? strokes.filter((x) => !selSet.has(x.id)) : strokes), [strokes, selSet]);
+  const selBox = useMemo(() => strokesBBox(selected), [selected]);
+
+  const applySel = (r: { strokes: Stroke[]; ids: string[] }) => {
+    commit(r.strokes, strokesRef.current);
+    setSelection(r.ids);
+    register();
+  };
+  const selActions = [
+    { label: 'Удалить', icon: 'trash' as const, run: () => (commit(strokesRef.current.filter((x) => !selSet.has(x.id)), strokesRef.current), setSelection([]), register()) },
+    { label: 'Копия', icon: 'plus' as const, run: () => applySel(duplicateStrokes(strokesRef.current, selection, 24, uid)) },
+    { label: 'Цвет пера', icon: 'pen' as const, run: () => applySel(recolorStrokes(strokesRef.current, selection, inkStore.get().penColor, uid)) },
+    { label: 'Снять выделение', icon: 'check' as const, run: () => setSelection([]) },
+  ];
 
   const bg = useMemo(() => {
     if (background === 'grid')
@@ -274,6 +380,7 @@ export function InkCanvas({ id, width, height, strokes: propStrokes, background 
   }, [background, patternId, width]);
 
   return (
+    <div className="ink-wrap">
     <svg
       ref={svgRef}
       className={'ink-canvas ' + (readOnly ? 'readonly ' : '') + (className ?? '')}
@@ -288,8 +395,36 @@ export function InkCanvas({ id, width, height, strokes: propStrokes, background 
       {bg && <defs>{bg}</defs>}
       {bg && <rect width={width} height={height} fill={`url(#${patternId})`} />}
       {background === 'lines' && <path d={`M70 0V${height}`} stroke="var(--paper-margin)" strokeWidth={1.5} />}
-      <StrokePaths strokes={strokes} />
+      <StrokePaths strokes={rest} />
+      <g ref={selGroupRef}>
+        {selected.length > 0 && <StrokePaths strokes={selected} halo />}
+        {selBox && (
+          <rect
+            x={selBox.x - 8}
+            y={selBox.y - 8}
+            width={selBox.w + 16}
+            height={selBox.h + 16}
+            className="lasso-box"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+      </g>
       <path ref={liveRef} />
+      <path ref={lassoRef} className="lasso-path" vectorEffect="non-scaling-stroke" />
     </svg>
+    {selBox && !readOnly && (
+      <div
+        className="lasso-menu"
+        style={{ left: `${(Math.max(0, selBox.x) / width) * 100}%`, top: `${(Math.max(0, selBox.y - 8) / height) * 100}%` }}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        {selActions.map((a) => (
+          <button key={a.label} className="tool-btn" title={a.label} aria-label={a.label} onClick={a.run}>
+            <Icon name={a.icon} size={18} />
+          </button>
+        ))}
+      </div>
+    )}
+    </div>
   );
 }

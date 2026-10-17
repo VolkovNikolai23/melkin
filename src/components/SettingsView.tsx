@@ -122,6 +122,16 @@ export function SettingsView() {
       </section>
 
       <section className="panel">
+        <h2>Apple Pencil</h2>
+        <p className="muted">
+          <strong>Рукописные блоки и тетради:</strong> рисует только Pencil, пальцы прокручивают и масштабируют (двумя пальцами), поэтому ладонь можно класть на экран.
+          Лассо выделяет штрихи — их можно перенести, скопировать, перекрасить или удалить.
+          <br />
+          <strong>Текст от руки (Scribble):</strong> коснитесь блока кончиком Pencil и пишите — iPadOS сам превратит почерк в текст. Включается в «Настройки iPad → Apple Pencil → От руки».
+        </p>
+      </section>
+
+      <section className="panel">
         <h2>Хранилище</h2>
         <p className="muted">
           Документов: {stats?.docs ?? '…'}, блоков: {stats?.blocks ?? '…'}, карточек: {stats?.cards ?? '…'}, файлов: {stats?.files ?? '…'}.

@@ -102,3 +102,94 @@ export function strokesBottom(strokes: Stroke[]): number {
   for (const s of strokes) for (let i = 1; i < s.points.length; i += 3) if (s.points[i] > max) max = s.points[i];
   return max;
 }
+
+// ---------- Лассо ----------
+
+/** Точка внутри многоугольника (метод луча). poly — плоский массив x0, y0, x1, y1, … */
+export function pointInPolygon(x: number, y: number, poly: number[]): boolean {
+  let inside = false;
+  const n = poly.length / 2;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = poly[i * 2];
+    const yi = poly[i * 2 + 1];
+    const xj = poly[j * 2];
+    const yj = poly[j * 2 + 1];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Штрихи, обведённые лассо: внутри должно оказаться больше половины точек штриха. */
+export function selectByLasso(strokes: Stroke[], poly: number[]): string[] {
+  if (poly.length < 6) return [];
+  return strokes
+    .filter((s) => {
+      let inside = 0;
+      const n = s.points.length / 3;
+      for (let i = 0; i < s.points.length; i += 3) if (pointInPolygon(s.points[i], s.points[i + 1], poly)) inside++;
+      return inside > n / 2;
+    })
+    .map((s) => s.id);
+}
+
+export interface BBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export function strokesBBox(strokes: Stroke[]): BBox | null {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const s of strokes) {
+    const pad = s.size;
+    for (let i = 0; i < s.points.length; i += 3) {
+      x0 = Math.min(x0, s.points[i] - pad);
+      y0 = Math.min(y0, s.points[i + 1] - pad);
+      x1 = Math.max(x1, s.points[i] + pad);
+      y1 = Math.max(y1, s.points[i + 1] + pad);
+    }
+  }
+  return x0 === Infinity ? null : { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+/**
+ * Сдвигает выбранные штрихи. Сдвинутый штрих получает новый id: контуры кэшируются по id,
+ * а штрихи считаются неизменяемыми. Возвращает новый массив и новые id выделения.
+ */
+export function moveStrokes(strokes: Stroke[], ids: string[], dx: number, dy: number, newId: () => string): { strokes: Stroke[]; ids: string[] } {
+  const set = new Set(ids);
+  const out: string[] = [];
+  const next = strokes.map((s) => {
+    if (!set.has(s.id)) return s;
+    const id = newId();
+    out.push(id);
+    return { ...s, id, points: s.points.map((v, i) => (i % 3 === 0 ? v + dx : i % 3 === 1 ? v + dy : v)) };
+  });
+  return { strokes: next, ids: out };
+}
+
+/** Копия выбранных штрихов со сдвигом (копия добавляется поверх). */
+export function duplicateStrokes(strokes: Stroke[], ids: string[], offset: number, newId: () => string): { strokes: Stroke[]; ids: string[] } {
+  const set = new Set(ids);
+  const copies = strokes
+    .filter((s) => set.has(s.id))
+    .map((s) => ({ ...s, id: newId(), points: s.points.map((v, i) => (i % 3 === 2 ? v : v + offset)) }));
+  return { strokes: [...strokes, ...copies], ids: copies.map((c) => c.id) };
+}
+
+/** Перекрасить выбранные штрихи (новые id — см. moveStrokes). */
+export function recolorStrokes(strokes: Stroke[], ids: string[], color: string, newId: () => string): { strokes: Stroke[]; ids: string[] } {
+  const set = new Set(ids);
+  const out: string[] = [];
+  const next = strokes.map((s) => {
+    if (!set.has(s.id)) return s;
+    const id = newId();
+    out.push(id);
+    return { ...s, id, color };
+  });
+  return { strokes: next, ids: out };
+}

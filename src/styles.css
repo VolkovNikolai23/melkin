@@ -2044,3 +2044,44 @@ button.card-badge {
 .done-stats .grade-4 .grade-label {
   color: var(--easy);
 }
+
+/* ---------- Лассо ---------- */
+.ink-wrap {
+  position: relative;
+}
+.lasso-path {
+  fill: color-mix(in srgb, var(--accent) 8%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+}
+.lasso-box {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+}
+.lasso-menu {
+  position: absolute;
+  z-index: 5;
+  transform: translateY(calc(-100% - 6px));
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 2px;
+}
+
+.nb-pagenum {
+  min-width: 64px;
+  text-align: center;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.nb-page-placeholder {
+  width: 100%;
+  background: var(--paper);
+}

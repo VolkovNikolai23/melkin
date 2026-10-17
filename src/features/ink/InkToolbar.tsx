@@ -2,10 +2,11 @@ import { Icon } from '../../components/Icon';
 import { MARKER_COLORS, PEN_COLORS, PEN_SIZES } from './geometry';
 import { inkStore, useInk, type Tool } from './inkStore';
 
-const TOOLS: { tool: Tool; icon: 'pen' | 'marker' | 'eraser'; label: string }[] = [
+const TOOLS: { tool: Tool; icon: 'pen' | 'marker' | 'eraser' | 'lasso'; label: string }[] = [
   { tool: 'pen', icon: 'pen', label: 'Перо' },
   { tool: 'marker', icon: 'marker', label: 'Маркер' },
   { tool: 'eraser', icon: 'eraser', label: 'Ластик' },
+  { tool: 'lasso', icon: 'lasso', label: 'Лассо: выделить и перенести' },
 ];
 
 export function InkToolbar({ floating }: { floating?: boolean }) {
@@ -25,8 +26,8 @@ export function InkToolbar({ floating }: { floating?: boolean }) {
           <Icon name={t.icon} />
         </button>
       ))}
-      {ink.tool !== 'eraser' && <span className="tb-sep" />}
-      {ink.tool !== 'eraser' &&
+      {(ink.tool === 'pen' || ink.tool === 'marker') && <span className="tb-sep" />}
+      {(ink.tool === 'pen' || ink.tool === 'marker') &&
         colors.map((c) => (
           <button
             key={c}
