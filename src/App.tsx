@@ -8,6 +8,7 @@ import { DocPage } from './features/notes/DocPage';
 import { SearchView } from './features/notes/SearchView';
 import { Sidebar } from './features/notes/Sidebar';
 import { ReviewView } from './features/review/ReviewView';
+import { TagPage, TagsView } from './features/links/LinkViews';
 import { useKeyboardInset } from './lib/keyboard';
 import { useRoute } from './lib/router';
 
@@ -55,6 +56,8 @@ export function App() {
   else if (name === 'review') view = <ReviewView scopeStr={route.query.get('scope')} />;
   else if (name === 'search') view = <SearchView initial={route.query.get('q') ?? ''} />;
   else if (name === 'settings') view = <SettingsView />;
+  else if (name === 'tags') view = <TagsView />;
+  else if (name === 'tag' && id) view = <TagPage tag={id} />;
   else view = <Home />;
 
   const inReview = name === 'review';

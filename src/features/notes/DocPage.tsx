@@ -7,7 +7,9 @@ import { navigate } from '../../lib/router';
 import { NotebookView } from '../ink/NotebookView';
 import { createDoc, DOC_LABEL, renameDoc, sortDocs } from './docs';
 import { Outliner } from './Outliner';
-import { TYPE_ICON } from './Sidebar';
+import { Backlinks, TagTable } from '../links/LinkViews';
+import { normalizeTag } from '../../lib/markup';
+import { TYPE_ICON } from './docIcons';
 
 function TitleInput({ doc }: { doc: Doc }) {
   const [title, setTitle] = useState(doc.title);
@@ -103,7 +105,10 @@ export function DocPage({ id, highlight }: { id: string; highlight: string | nul
           )}
         </div>
       </header>
-      {doc.type === 'note' && <Outliner docId={doc.id} highlight={highlight} />}
+      {(doc.type === 'note' || doc.type === 'daily') && <Outliner docId={doc.id} highlight={highlight} />}
+      {doc.isTemplate && <p className="muted small template-note">Это шаблон: вставляется в другие документы командой /шаблон. Карточки шаблона не повторяются.</p>}
+      {doc.type !== 'folder' && !/\s/.test(doc.title.trim()) && <TagTable tag={normalizeTag(doc.title)} title={`Блоки с тегом #${normalizeTag(doc.title)}`} />}
+      {doc.type !== 'folder' && <Backlinks docId={doc.id} />}
       {doc.type === 'notebook' && <NotebookView doc={doc} />}
       {doc.type === 'folder' && <FolderView doc={doc} />}
     </div>

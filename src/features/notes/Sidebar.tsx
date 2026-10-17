@@ -1,15 +1,17 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
-import { Icon, type IconName } from '../../components/Icon';
+import { Icon } from '../../components/Icon';
 import { MenuButton, type MenuItem } from '../../components/Menu';
 import { dialog } from '../../components/dialog';
 import { db } from '../../db/db';
 import type { Doc, DocType } from '../../db/schema';
 import { navigate } from '../../lib/router';
 import { beginDrag } from '../../components/dnd';
+import { TYPE_ICON } from './docIcons';
+import { getOrCreateDaily } from './daily';
+import { setTemplate } from './templates';
 import { collectSubtree, createDoc, deleteDoc, moveDoc, moveDocTo, renameDoc, shiftDoc, sortDocs } from './docs';
 
-export const TYPE_ICON: Record<DocType, IconName> = { folder: 'folder', note: 'note', notebook: 'notebook', pdf: 'pdf', daily: 'calendar' };
 
 async function create(type: DocType, parentId: string | null) {
   const doc = await createDoc(type, parentId);
@@ -55,6 +57,9 @@ function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: 
         if (t?.trim()) renameDoc(doc.id, t.trim());
       },
     },
+    ...(!isFolder && doc.type !== 'daily'
+      ? [{ label: doc.isTemplate ? 'Убрать из шаблонов' : 'Сделать шаблоном', icon: 'template' as const, onClick: () => setTemplate(doc.id, !doc.isTemplate) }]
+      : []),
     { label: 'Переместить в…', icon: 'move', onClick: () => moveDialog(doc, docs) },
     { label: 'Выше', icon: 'arrowUp', onClick: () => shiftDoc(doc.id, -1) },
     { label: 'Ниже', icon: 'arrowDown', onClick: () => shiftDoc(doc.id, 1) },
@@ -100,6 +105,7 @@ function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: 
         <span className="tree-chevron">{isFolder && <Icon name={doc.collapsed ? 'right' : 'down'} size={16} />}</span>
         <Icon name={TYPE_ICON[doc.type]} size={18} />
         <span className="tree-title">{doc.title || 'Без названия'}</span>
+        {doc.isTemplate && <span className="tree-badge">шаблон</span>}
         <MenuButton items={items} />
       </div>
       {isFolder && !doc.collapsed && (
@@ -157,9 +163,21 @@ export function Sidebar({ activeId, routeName, dueCount, onNavigate, onCollapse 
         <button className={'nav-item' + (routeName === '' ? ' active' : '')} onClick={() => nav('')}>
           <Icon name="home" /> Главная
         </button>
+        <button
+          className="nav-item"
+          onClick={async () => {
+            const d = await getOrCreateDaily();
+            nav(`doc/${d.id}`);
+          }}
+        >
+          <Icon name="today" /> Сегодня
+        </button>
         <button className={'nav-item' + (routeName === 'review' ? ' active' : '')} onClick={() => nav('review')}>
           <Icon name="cards" /> Повторить
           {dueCount > 0 && <span className="badge">{dueCount}</span>}
+        </button>
+        <button className={'nav-item' + (routeName === 'tags' || routeName === 'tag' ? ' active' : '')} onClick={() => nav('tags')}>
+          <Icon name="tag" /> Теги
         </button>
         <button className={'nav-item' + (routeName === 'settings' ? ' active' : '')} onClick={() => nav('settings')}>
           <Icon name="settings" /> Настройки и копии

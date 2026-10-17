@@ -6,8 +6,11 @@ import './styles.css';
 import { App } from './App';
 import { db, requestPersistence } from './db/db';
 import { resyncAllCards } from './features/cards/sync';
+import { getOrCreateDaily } from './features/notes/daily';
 
 requestPersistence();
+// Ежедневная заметка на сегодня создаётся автоматически
+getOrCreateDaily().catch(() => undefined);
 // После обновления схемы карточки пересобираются новым парсером (история сохраняется).
 db.meta.get('resyncCards').then(async (m) => {
   if (!m?.value) return;

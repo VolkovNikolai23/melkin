@@ -3,6 +3,7 @@ import type { Block, BlockKind } from '../../db/schema';
 import { orderBetween, uid } from '../../lib/id';
 import { syncBlockCards } from '../cards/sync';
 import { extractTags } from '../../lib/markup';
+import { linksFor } from '../links/links';
 
 export const INK_WIDTH = 800;
 export const INK_DEFAULT_HEIGHT = 320;
@@ -46,6 +47,7 @@ async function touch(docId: string) {
 export async function appendBlock(docId: string, kind: BlockKind = 'text', text = ''): Promise<Block> {
   const sibs = await siblings(docId, null);
   const b = makeBlock(docId, null, orderBetween(sibs.at(-1)?.order, undefined), kind, text);
+  b.links = await linksFor(text);
   await db.blocks.add(b);
   await touch(docId);
   if (text) await syncBlockCards(b.id);
@@ -63,6 +65,7 @@ export async function insertAfter(block: Block, text = '', kind: BlockKind = 'te
     const i = sibs.findIndex((s) => s.id === block.id);
     nb = makeBlock(block.docId, block.parentId, orderBetween(sibs[i].order, sibs[i + 1]?.order), kind, text);
   }
+  nb.links = await linksFor(text);
   await db.blocks.add(nb);
   await touch(block.docId);
   if (text) await syncBlockCards(nb.id);
@@ -80,7 +83,9 @@ export async function insertBefore(block: Block, text = ''): Promise<Block> {
 export async function setText(id: string, text: string) {
   const b = await db.blocks.get(id);
   if (!b || b.text === text) return;
-  await db.blocks.update(id, { text, tags: extractTags(text), updatedAt: Date.now() });
+  // В коде «#include» — не тег, а [[…]] — не ссылка
+  const plain = b.kind === 'text';
+  await db.blocks.update(id, { text, tags: plain ? extractTags(text) : [], links: plain ? await linksFor(text) : [], updatedAt: Date.now() });
   await touch(b.docId);
   await syncBlockCards(id);
 }
@@ -131,14 +136,19 @@ export async function subtreeIds(block: Block): Promise<string[]> {
 
 export async function deleteBlock(block: Block) {
   const ids = await subtreeIds(block);
+  const fileIds = (await db.blocks.bulkGet(ids)).flatMap((b) => (b?.image?.fileId ? [b.image.fileId] : []));
   await db.transaction('rw', db.blocks, db.cards, async () => {
     await db.cards.where('blockId').anyOf(ids).delete();
     await db.blocks.bulkDelete(ids);
   });
   await touch(block.docId);
+  if (fileIds.length) {
+    const { cleanupFiles } = await import('./images');
+    await cleanupFiles(fileIds);
+  }
 }
 
-export function setBlockProps(id: string, patch: Partial<Pick<Block, 'heading' | 'list' | 'cardsOff'>>) {
+export function setBlockProps(id: string, patch: Partial<Pick<Block, 'heading' | 'list' | 'cardsOff' | 'props' | 'code' | 'image' | 'kind' | 'portalOf'>>) {
   return db.blocks.update(id, { ...patch, updatedAt: Date.now() });
 }
 

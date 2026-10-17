@@ -43,6 +43,16 @@ const PATHS = {
   listNumber: 'M10 6h10M10 12h10M10 18h10M4 5l1.5-1V9M4 15h2.5L4 18.5h3',
   card: 'M4 6h16v12H4zM8 12h8M13 9l3 3-3 3',
   cardOff: 'M4 6h16v12H4zM4 6l16 12',
+  image: 'M4 5h16v14H4zM4 15l4-4 4 4 3-3 5 5M15 9h.01',
+  code: 'M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16',
+  portal: 'M4 4h16v16H4zM9 9h6v6H9zM4 4l5 5M20 20l-5-5',
+  link: 'M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1',
+  template: 'M4 4h16v4H4zM4 11h7v9H4zM14 11h6v4h-6zM14 18h6',
+  props: 'M4 6h5M4 12h5M4 18h5M12 6h8M12 12h8M12 18h8',
+  tag: 'M4 4h7l9 9-7 7-9-9zM8 8h.01',
+  today: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M12 13v4M10 15h4',
+  table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14',
+  backlink: 'M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6M4 20l6-6M4 15v5h5',
 };
 
 export type IconName = keyof typeof PATHS;

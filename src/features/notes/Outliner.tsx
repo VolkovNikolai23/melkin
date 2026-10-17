@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { beginDrag } from '../../components/dnd';
 import { Icon, type IconName } from '../../components/Icon';
 import { MenuButton, type MenuItem } from '../../components/Menu';
@@ -13,6 +13,10 @@ import { InkToolbar } from '../ink/InkToolbar';
 import { BlockEditor } from './BlockEditor';
 import { appendBlock, childrenMap, deleteBlock, indent, insertAfter, moveBlock, moveBlockTo, outdent, setCollapsed, visibleOrder } from './blocks';
 import { createDoc } from './docs';
+import { CodeBlock } from './CodeBlock';
+import { ImageBlock } from './ImageBlock';
+import { insertImages, pickFiles } from './images';
+import { PropsView } from './PropsView';
 import { OutlinerContext, useOutliner, type Caret, type EditorAction, type OutlinerCtx } from './outlinerContext';
 import { HIGHLIGHT_COLORS, renderText } from './render';
 
@@ -37,7 +41,7 @@ function listNumber(block: Block, siblings: Block[]): number {
   return n;
 }
 
-function BlockItem({ block }: { block: Block }) {
+export function BlockItem({ block }: { block: Block }) {
   const ctx = useOutliner();
   const kids = ctx.kids.get(block.id) ?? [];
   const editing = ctx.editing?.id === block.id;
@@ -54,7 +58,7 @@ function BlockItem({ block }: { block: Block }) {
     const link = t.closest('[data-link]');
     if (link) return openLink(link.getAttribute('data-link')!);
     const tag = t.closest('[data-tag]');
-    if (tag) return navigate(`search?q=${encodeURIComponent('#' + tag.getAttribute('data-tag'))}`);
+    if (tag) return navigate(`tag/${encodeURIComponent(tag.getAttribute('data-tag')!.toLowerCase())}`);
     if (window.getSelection()?.toString()) return;
     e.preventDefault();
     keepKeyboard();
@@ -65,11 +69,12 @@ function BlockItem({ block }: { block: Block }) {
     beginDrag(e, {
       attr: 'data-drop-block',
       id: block.id,
-      label: block.kind === 'ink' ? 'Рисунок' : block.text.slice(0, 40),
+      label: { ink: 'Рисунок', image: 'Картинка', portal: 'Портал', code: 'Код' }[block.kind as string] ?? block.text.slice(0, 40),
       canNest: () => true,
       onDrop: (tid, pos) => moveBlockTo(block.id, tid, pos),
     });
 
+  const kindLabel = block.kind === 'ink' ? 'рисунок' : 'портал';
   const inkMenu: MenuItem[] = [
     { label: 'Текстовый блок ниже', icon: 'plus', onClick: async () => ctx.setEditing({ id: (await insertAfter(block, '', 'text', false)).id, caret: 'start' }) },
     { label: 'Вложить', icon: 'indent', onClick: () => indent(block) },
@@ -77,11 +82,11 @@ function BlockItem({ block }: { block: Block }) {
     { label: 'Выше', icon: 'arrowUp', onClick: () => moveBlock(block, -1) },
     { label: 'Ниже', icon: 'arrowDown', onClick: () => moveBlock(block, 1) },
     {
-      label: 'Удалить рисунок',
+      label: `Удалить ${kindLabel}`,
       icon: 'trash',
       danger: true,
       onClick: async () => {
-        if (await dialog.confirm('Удалить рисунок?', 'Удалить')) deleteBlock(block);
+        if (await dialog.confirm(`Удалить ${kindLabel}?`, 'Удалить')) deleteBlock(block);
       },
     },
   ];
@@ -113,6 +118,12 @@ function BlockItem({ block }: { block: Block }) {
         <div className="block-body">
           {block.kind === 'ink' ? (
             <InkBlock block={block} />
+          ) : block.kind === 'image' ? (
+            <ImageBlock block={block} />
+          ) : block.kind === 'code' ? (
+            <CodeBlock block={block} editing={editing} />
+          ) : block.kind === 'portal' ? (
+            <PortalBlock block={block} />
           ) : editing ? (
             <BlockEditor block={block} caret={ctx.editing!.caret} />
           ) : (
@@ -120,6 +131,12 @@ function BlockItem({ block }: { block: Block }) {
               <RenderedText text={block.text} />
             </div>
           )}
+          <PropsView
+            block={block}
+            open={ctx.propsOpen === block.id}
+            onOpen={() => ctx.setPropsOpen(block.id)}
+            onClose={() => ctx.setPropsOpen(null)}
+          />
         </div>
         {cards > 0 && !editing && (
           <span className={'card-badge' + (block.cardsOff ? ' off' : '')} title={block.cardsOff ? 'Карточки отключены' : 'Карточек в блоке'}>
@@ -127,7 +144,7 @@ function BlockItem({ block }: { block: Block }) {
             {cards > 1 ? cards : ''}
           </span>
         )}
-        {block.kind === 'ink' && <MenuButton items={inkMenu} label="Действия с рисунком" />}
+        {(block.kind === 'ink' || block.kind === 'portal') && <MenuButton items={inkMenu} label="Действия с блоком" />}
       </div>
       {kids.length > 0 && !block.collapsed && (
         <div className="block-children">
@@ -147,6 +164,8 @@ const HL_LABEL: Record<string, string> = { yellow: 'Жёлтый', green: 'Зе�
 function EditToolbar({ api }: { api: OutlinerCtx['editorApi'] }) {
   const run = (a: EditorAction) => api.current?.(a);
   const tools: Tool[] = [
+    { a: 'slash', icon: 'plus', label: 'Вставить… (/)' },
+    'sep',
     { a: 'outdent', icon: 'outdent', label: 'Вынести (Shift+Tab)' },
     { a: 'indent', icon: 'indent', label: 'Вложить (Tab)' },
     { a: 'up', icon: 'arrowUp', label: 'Выше (⌘⇧↑)' },
@@ -176,6 +195,7 @@ function EditToolbar({ api }: { api: OutlinerCtx['editorApi'] }) {
       label: 'Сделать карточкой',
     },
     { a: 'cardsOff', icon: 'cardOff', label: 'Отключить/включить карточки блока' },
+    { a: 'props', icon: 'props', label: 'Свойства блока' },
     'sep',
     { a: 'draw', icon: 'pen', label: 'Рукописный блок' },
     { a: 'delete', icon: 'trash', label: 'Удалить блок' },
@@ -200,10 +220,12 @@ function EditToolbar({ api }: { api: OutlinerCtx['editorApi'] }) {
   );
 }
 
-export function Outliner({ docId, highlight }: { docId: string; highlight: string | null }) {
+/** Состояние outliner'а для документа: дерево блоков, редактирование, счётчики карточек. */
+function useOutlinerState(docId: string, highlight: string | null): OutlinerCtx | null {
   const blocks = useLiveQuery(() => db.blocks.where('docId').equals(docId).toArray(), [docId]);
   const cards = useLiveQuery(() => db.cards.where('docId').equals(docId).toArray(), [docId]);
   const [editing, setEditing] = useState<{ id: string; caret: Caret } | null>(null);
+  const [propsOpen, setPropsOpen] = useState<string | null>(null);
   const editorApi = useRef<((a: EditorAction) => void) | null>(null);
 
   const kids = useMemo(() => childrenMap(blocks ?? []), [blocks]);
@@ -226,12 +248,57 @@ export function Outliner({ docId, highlight }: { docId: string; highlight: strin
     }
   }, [highlight, blocks]);
 
-  useEffect(() => setEditing(null), [docId]);
+  useEffect(() => {
+    setEditing(null);
+    setPropsOpen(null);
+  }, [docId]);
 
-  const ctx: OutlinerCtx = { docId, kids, visible, editing, setEditing, cardCount, highlight, editorApi };
   if (!blocks) return null;
+  return { docId, kids, visible, editing, setEditing, cardCount, highlight, editorApi, propsOpen, setPropsOpen };
+}
+
+// Цепочка порталов, внутри которых мы находимся: защита от бесконечной вложенности.
+const PortalChain = createContext<string[]>([]);
+
+/** Портал: живой блок из другого места. Правка здесь меняет оригинал. */
+function PortalBlock({ block }: { block: Block }) {
+  const chain = useContext(PortalChain);
+  const target = useLiveQuery(() => (block.portalOf ? db.blocks.get(block.portalOf).then((b) => b ?? null) : null), [block.portalOf]);
+  const srcDoc = useLiveQuery(() => (target ? db.docs.get(target.docId) : undefined), [target?.docId]);
+  if (target === undefined) return null;
+  if (!target) return <div className="portal portal-missing">Оригинал портала удалён</div>;
+  if (chain.includes(target.id) || chain.length >= 3) return <div className="portal portal-missing">↻ Портал ссылается сам на себя</div>;
+  return (
+    <div className="portal">
+      <button className="portal-src" onClick={() => navigate(`doc/${target.docId}?b=${target.id}`)}>
+        <Icon name="portal" size={14} /> {srcDoc?.title ?? '…'}
+      </button>
+      <PortalChain.Provider value={[...chain, target.id]}>
+        <PortalOutline docId={target.docId} rootId={target.id} />
+      </PortalChain.Provider>
+    </div>
+  );
+}
+
+function PortalOutline({ docId, rootId }: { docId: string; rootId: string }) {
+  const ctx = useOutlinerState(docId, null);
+  const root = ctx?.visible.find((b) => b.id === rootId) ?? (ctx ? [...ctx.kids.values()].flat().find((b) => b.id === rootId) : undefined);
+  if (!ctx || !root) return null;
+  return (
+    <OutlinerContext.Provider value={ctx}>
+      <BlockItem block={root} />
+      {ctx.editing && <EditToolbar api={ctx.editorApi} />}
+    </OutlinerContext.Provider>
+  );
+}
+
+export function Outliner({ docId, highlight }: { docId: string; highlight: string | null }) {
+  const ctx = useOutlinerState(docId, highlight);
+  const [dropping, setDropping] = useState(false);
+  if (!ctx) return null;
+  const { kids, editing, setEditing, editorApi } = ctx;
   const roots = kids.get(null) ?? [];
-  const hasInk = blocks.some((b) => b.kind === 'ink');
+  const hasInk = [...kids.values()].some((l) => l.some((b) => b.kind === 'ink'));
 
   const addText = async () => {
     keepKeyboard();
@@ -239,9 +306,30 @@ export function Outliner({ docId, highlight }: { docId: string; highlight: strin
     setEditing({ id: b.id, caret: 'start' });
   };
 
+  // Перетаскивание картинок из «Файлов»/Finder прямо в заметку
+  const onDrop = async (e: React.DragEvent) => {
+    setDropping(false);
+    const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    e.preventDefault();
+    const id = (e.target as HTMLElement).closest('[data-drop-block]')?.getAttribute('data-drop-block');
+    const after = id ? ((await db.blocks.get(id)) ?? null) : null;
+    await insertImages(docId, files, after && after.docId === docId ? after : null);
+  };
+
   return (
     <OutlinerContext.Provider value={ctx}>
-      <div className="outliner">
+      <div
+        className={'outliner' + (dropping ? ' file-over' : '')}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes('Files')) {
+            e.preventDefault();
+            setDropping(true);
+          }
+        }}
+        onDragLeave={() => setDropping(false)}
+        onDrop={onDrop}
+      >
         {roots.map((b) => (
           <BlockItem key={b.id} block={b} />
         ))}
@@ -256,6 +344,15 @@ export function Outliner({ docId, highlight }: { docId: string; highlight: strin
           </button>
           <button className="btn ghost" onClick={() => appendBlock(docId, 'ink')}>
             <Icon name="pen" /> Рисунок
+          </button>
+          <button
+            className="btn ghost"
+            onClick={async () => {
+              const files = await pickFiles('image/*');
+              if (files.length) await insertImages(docId, files, null);
+            }}
+          >
+            <Icon name="image" /> Картинка
           </button>
         </div>
       </div>

@@ -2,8 +2,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { BACKUP_REMIND_DAYS, getLastBackup } from '../db/backup';
 import { createDoc, DOC_LABEL } from '../features/notes/docs';
+import { getOrCreateDaily } from '../features/notes/daily';
 import { navigate } from '../lib/router';
-import { TYPE_ICON } from '../features/notes/Sidebar';
+import { TYPE_ICON } from '../features/notes/docIcons';
 import { plural } from '../lib/time';
 import { Icon } from './Icon';
 import { useDueCount } from './useDue';
@@ -61,6 +62,10 @@ export function Home() {
               <small>{DOC_LABEL[d.type]}</small>
             </button>
           ))}
+          <button className="doc-card new" onClick={async () => navigate(`doc/${(await getOrCreateDaily()).id}`)}>
+            <Icon name="today" />
+            <span>Сегодня</span>
+          </button>
           <button className="doc-card new" onClick={() => create('note')}>
             <Icon name="plus" />
             <span>Новая заметка</span>
@@ -91,10 +96,12 @@ export function Home() {
           <dd>форматирование (или ⌘B / ⌘I / ⌘U и панель внизу)</dd>
           <dt># / ## / ### · 1.</dt>
           <dd>заголовки H1–H3 · нумерованный пункт</dd>
-          <dt>#тег · [[Документ]]</dt>
-          <dd>тег и ссылка на документ</dd>
-          <dt>/draw</dt>
-          <dd>рукописный блок для Apple Pencil</dd>
+          <dt>#тег · [[Документ]] · ((блок</dt>
+          <dd>тег · ссылка на документ (с обратными ссылками) · портал — живая копия блока</dd>
+          <dt>/</dt>
+          <dd>меню вставки: картинка, код, рисунок, портал, шаблон, свойства, заголовки…</dd>
+          <dt>```python</dt>
+          <dd>блок кода с подсветкой</dd>
           <dt>Enter · Shift+Enter · Tab · Shift+Tab</dt>
           <dd>новый блок · перенос строки · вложить · вынести. Удерживайте маркер блока, чтобы перетащить</dd>
         </dl>

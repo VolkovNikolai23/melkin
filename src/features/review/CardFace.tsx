@@ -5,13 +5,29 @@ import type { Block, CardRow } from '../../db/schema';
 import { InkBlock } from '../ink/InkBlock';
 import { childrenMap } from '../notes/blocks';
 import { renderText } from '../notes/render';
+import { ImageBlock } from '../notes/ImageBlock';
+import { highlight, normLang } from '../notes/highlight';
 
 function Html({ html, className }: { html: string; className?: string }) {
   return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
+function PortalContent({ id }: { id: string }) {
+  const b = useLiveQuery(() => db.blocks.get(id), [id]);
+  return b ? <BlockContent b={b} /> : null;
+}
+
+/** Любой вид блока в режиме чтения (в ответе карточки). */
 function BlockContent({ b }: { b: Block }) {
   if (b.kind === 'ink') return <InkBlock block={b} readOnly />;
+  if (b.kind === 'image') return <ImageBlock block={b} readOnly />;
+  if (b.kind === 'code')
+    return (
+      <pre className={`code-view language-${normLang(b.code?.lang)}`}>
+        <code dangerouslySetInnerHTML={{ __html: highlight(b.text, b.code?.lang ?? 'text') }} />
+      </pre>
+    );
+  if (b.kind === 'portal' && b.portalOf) return <PortalContent id={b.portalOf} />;
   return <Html className={b.heading ? `h${b.heading}` : undefined} html={renderText(b.text, { showSeparator: true })} />;
 }
 

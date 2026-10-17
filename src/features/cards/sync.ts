@@ -71,7 +71,10 @@ async function syncOne(block: Block | undefined, blockId: string) {
     const parent = block.parentId ? await db.blocks.get(block.parentId) : undefined;
     parsed = parseCards(block.text, { parentText: parent?.text });
   }
-  const { put, remove } = planCardSync(blockId, block?.docId ?? '', parsed, existing, Date.now(), !!block?.cardsOff);
+  // Карточки шаблонов не повторяем — они оживают в копиях
+  const doc = block ? await db.docs.get(block.docId) : undefined;
+  const off = !!block?.cardsOff || !!doc?.isTemplate;
+  const { put, remove } = planCardSync(blockId, block?.docId ?? '', parsed, existing, Date.now(), off);
   if (remove.length) await db.cards.bulkDelete(remove);
   if (put.length) await db.cards.bulkPut(put);
 }
@@ -81,7 +84,7 @@ async function syncOne(block: Block | undefined, blockId: string) {
  * Описания (;;) у дочерних блоков зависят от названия понятия-родителя — их тоже обновляем.
  */
 export async function syncBlockCards(blockId: string) {
-  await db.transaction('rw', db.blocks, db.cards, async () => {
+  await db.transaction('rw', db.blocks, db.cards, db.docs, async () => {
     const block = await db.blocks.get(blockId);
     await syncOne(block, blockId);
     if (!block) return;

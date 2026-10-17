@@ -55,6 +55,8 @@ export interface ImageData {
   fileId: string;
   width: number;
   height: number;
+  /** Ширина показа в долях ширины блока (1 — во всю ширину) */
+  displayWidth?: number;
   /** Прямоугольники image occlusion; каждый — отдельная карточка */
   occlusions?: Rect[];
 }

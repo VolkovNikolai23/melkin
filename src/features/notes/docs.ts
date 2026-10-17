@@ -1,6 +1,7 @@
 import { db } from '../../db/db';
 import type { Doc, DocType } from '../../db/schema';
 import { uid } from '../../lib/id';
+import { propagateRename, relinkTitle } from '../links/links';
 
 export const DOC_LABEL: Record<DocType, string> = { folder: 'Папка', note: 'Заметка', notebook: 'Тетрадь', pdf: 'PDF', daily: 'Ежедневная заметка' };
 
@@ -25,11 +26,14 @@ export async function createDoc(type: DocType, parentId: string | null, title?: 
       await db.pages.add({ id: uid(), docId: doc.id, order: 0, background: 'grid', strokes: [], createdAt: now, updatedAt: now });
     }
   });
+  if (type !== 'folder') await relinkTitle(doc.title);
   return doc;
 }
 
-export function renameDoc(id: string, title: string) {
-  return db.docs.update(id, { title, updatedAt: Date.now() });
+export async function renameDoc(id: string, title: string) {
+  const old = await db.docs.get(id);
+  await db.docs.update(id, { title, updatedAt: Date.now() });
+  if (old && old.type !== 'folder') await propagateRename(id, old.title, title);
 }
 
 export function touchDoc(id: string) {

@@ -21,6 +21,8 @@ export type EditorAction =
   | 'heading'
   | 'number'
   | 'cardsOff'
+  | 'props'
+  | 'slash'
   | `hl:${string}`
   | `sep:${SepKind}`;
 
@@ -33,6 +35,9 @@ export interface OutlinerCtx {
   cardCount: Map<string, number>;
   highlight: string | null;
   editorApi: MutableRefObject<((a: EditorAction) => void) | null>;
+  /** Блок, у которого открыт редактор свойств */
+  propsOpen: string | null;
+  setPropsOpen: (id: string | null) => void;
 }
 
 export const OutlinerContext = createContext<OutlinerCtx | null>(null);

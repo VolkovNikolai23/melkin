@@ -17,6 +17,11 @@ import {
 import { syncBlockCards } from '../cards/sync';
 import { analyze } from '../../lib/markup';
 import { useOutliner, type Caret, type EditorAction } from './outlinerContext';
+import { createDoc } from './docs';
+import { insertImages, pickFiles } from './images';
+import { SuggestPopup, useSuggestions, type SlashCommand } from './Suggest';
+import { insertTemplate, listTemplates } from './templates';
+import { detectTrigger, type Trigger } from './trigger';
 
 const DRAW_COMMANDS = ['/draw', '/рисунок', '/рис'];
 
@@ -48,6 +53,133 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
     textRef.current = v;
     setTextState(v);
   };
+
+  // ---------- Автодополнение: [[ссылка, ((портал, #тег, /команда ----------
+  const [trig, setTrig] = useState<Trigger | null>(null);
+  const [active, setActive] = useState(0);
+  const dismissed = useRef<number | null>(null);
+
+  const updateTrigger = () => {
+    const ta = ref.current;
+    if (!ta) return;
+    const t = ta.selectionStart === ta.selectionEnd ? detectTrigger(textRef.current, ta.selectionStart) : null;
+    if (!t) dismissed.current = null;
+    const next = t && dismissed.current === t.start ? null : t;
+    setTrig((prev) => (prev?.kind === next?.kind && prev?.start === next?.start && prev?.query === next?.query ? prev : next));
+    if (next?.query !== trig?.query || next?.kind !== trig?.kind) setActive(0);
+  };
+
+  /** Заменяет текст от `start` до курсора на `insert` и ставит курсор после вставки. */
+  const replaceRange = (start: number, insert: string, caretOffset = insert.length) => {
+    const ta = ref.current!;
+    const v = textRef.current;
+    const end = Math.max(start, ta.selectionStart);
+    setLocal(v.slice(0, start) + insert + v.slice(end));
+    setTrig(null);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(flush, 400);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + caretOffset, start + caretOffset);
+      autosize(ta);
+      updateTrigger();
+    });
+  };
+
+  /** Блок пуст и без детей — его можно превратить во что-то другое (картинку, код, портал). */
+  const isBlank = () => !textRef.current.trim() && !hasKids();
+
+  const runSlash = async (cmd: SlashCommand, start: number) => {
+    // выбор файла должен начаться синхронно, внутри жеста пользователя (требование iPadOS)
+    const files = cmd === 'image' ? pickFiles('image/*') : null;
+    replaceRange(start, '');
+    switch (cmd) {
+      case 'image': {
+        const list = await files!;
+        if (!list.length) return;
+        await flush();
+        const blank = isBlank();
+        const fresh = (await db.blocks.get(block.id))!;
+        await insertImages(block.docId, list, fresh);
+        if (blank) await deleteBlock(fresh);
+        ctx.setEditing(null);
+        return;
+      }
+      case 'code': {
+        await flush();
+        if (isBlank()) {
+          await db.blocks.update(block.id, { kind: 'code', code: { lang: 'python' }, tags: [], links: [] });
+          await syncBlockCards(block.id);
+          ctx.setEditing({ id: block.id, caret: 'start' });
+        } else {
+          const nb = await insertAfter((await db.blocks.get(block.id))!, '', 'code', false);
+          await db.blocks.update(nb.id, { code: { lang: 'python' } });
+          ctx.setEditing({ id: nb.id, caret: 'start' });
+        }
+        return;
+      }
+      case 'draw':
+        return run('draw');
+      case 'portal':
+        return replaceRange(start, '((');
+      case 'link':
+        return replaceRange(start, '[[');
+      case 'math':
+        return replaceRange(start, '$$  $$', 3);
+      case 'card':
+        return run('sep:>>');
+      case 'h1':
+      case 'h2':
+      case 'h3':
+        return setBlockProps(block.id, { heading: Number(cmd[1]) as 1 | 2 | 3 });
+      case 'number':
+        return setBlockProps(block.id, { list: 'number' });
+      case 'props':
+        await flush();
+        ctx.setPropsOpen(block.id);
+        return;
+      case 'template': {
+        const templates = await listTemplates();
+        if (!templates.length) {
+          await dialog.alert('Шаблонов пока нет', 'Откройте нужный документ и в его меню «⋯» в боковой панели выберите «Сделать шаблоном».');
+          return;
+        }
+        const id = templates.length === 1 ? templates[0].id : await dialog.select('Какой шаблон вставить?', templates.map((t) => ({ value: t.id, label: t.title })), templates[0].id);
+        if (!id) return;
+        await flush();
+        const blank = isBlank();
+        const fresh = (await db.blocks.get(block.id))!;
+        await insertTemplate(id, block.docId, fresh);
+        if (blank) await deleteBlock(fresh);
+        ctx.setEditing(null);
+        return;
+      }
+    }
+  };
+
+  const suggestions = useSuggestions(trig, block, {
+    replace: (start, insert) => replaceRange(start, insert),
+    slash: (cmd, start) => runSlash(cmd, start),
+    createAndLink: async (title, start) => {
+      replaceRange(start, `[[${title}]]`);
+      await createDoc('note', null, title);
+      await flush();
+    },
+    portal: async (target, start) => {
+      replaceRange(start, '');
+      await flush();
+      if (isBlank()) {
+        await db.blocks.update(block.id, { kind: 'portal', portalOf: target.id, text: '', tags: [], links: [] });
+        await syncBlockCards(block.id);
+      } else {
+        const nb = await insertAfter((await db.blocks.get(block.id))!, '', 'portal', false);
+        await db.blocks.update(nb.id, { portalOf: target.id });
+      }
+      ctx.setEditing(null);
+    },
+  });
+  const suggestHint =
+    trig?.kind === 'portal' ? 'Начните вводить текст блока, который нужно вставить…' : trig?.kind === 'link' && !trig.query ? 'Название документа…' : undefined;
 
   const flush = () => {
     window.clearTimeout(timer.current);
@@ -203,6 +335,24 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
           });
         }
         break;
+      case 'props':
+        await flush();
+        ctx.setPropsOpen(ctx.propsOpen === block.id ? null : block.id);
+        break;
+      case 'slash': {
+        // кнопка «+» на панели: открываем слэш-меню в позиции курсора
+        if (!ta) break;
+        const at = ta.selectionStart;
+        const v = textRef.current;
+        const pre = at > 0 && !/\s/.test(v[at - 1]) ? ' /' : '/';
+        setLocal(v.slice(0, at) + pre + v.slice(at));
+        requestAnimationFrame(() => {
+          ta.focus();
+          ta.setSelectionRange(at + pre.length, at + pre.length);
+          updateTrigger();
+        });
+        break;
+      }
       case 'done':
         ta?.blur();
         break;
@@ -218,6 +368,30 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
 
   const onKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
+    if (trig && (suggestions.length || suggestHint)) {
+      const n = suggestions.length;
+      if (e.key === 'ArrowDown' && n) {
+        e.preventDefault();
+        setActive((a) => (a + 1) % n);
+        return;
+      }
+      if (e.key === 'ArrowUp' && n) {
+        e.preventDefault();
+        setActive((a) => (a - 1 + n) % n);
+        return;
+      }
+      if ((e.key === 'Enter' || e.key === 'Tab') && n) {
+        e.preventDefault();
+        suggestions[Math.min(active, n - 1)].apply();
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        dismissed.current = trig.start;
+        setTrig(null);
+        return;
+      }
+    }
     const ta = e.currentTarget;
     const v = textRef.current;
     const s = ta.selectionStart;
@@ -313,6 +487,7 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
   };
 
   return (
+    <div className="editor-wrap">
     <textarea
       ref={ref}
       className={'block-input' + (block.heading ? ` h${block.heading}` : '')}
@@ -320,7 +495,7 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
       rows={1}
       spellCheck
       autoCapitalize="sentences"
-      placeholder="Текст, $формула$, вопрос :: ответ, {{клоз}}, /draw"
+      placeholder="Текст, $формула$, вопрос >> ответ, [[ссылка]], / — команды"
       onChange={(e) => {
         // Быстрый ввод как в Markdown: «# » → H1, «## » → H2, «### » → H3, «1. » → нумерация
         const ta = e.target;
@@ -332,12 +507,35 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
           setLocal(ta.value.slice(md[0].length));
           requestAnimationFrame(() => ta.setSelectionRange(caretPos, caretPos));
         } else setLocal(ta.value);
+        // «```» в пустом блоке — превращаем его в блок кода (```python → сразу с языком)
+        const fence = ta.value.match(/^```(\w*)$/);
+        if (fence && !hasKids()) {
+          const lang = fence[1] || 'python';
+          setLocal('');
+          db.blocks.update(block.id, { kind: 'code', code: { lang }, text: '', tags: [], links: [] }).then(() => syncBlockCards(block.id));
+          return;
+        }
         autosize(e.target);
+        updateTrigger();
         window.clearTimeout(timer.current);
         timer.current = window.setTimeout(flush, 600);
       }}
       onKeyDown={onKeyDown}
+      onSelect={updateTrigger}
+      onPaste={async (e) => {
+        // Картинка из буфера обмена → блок-картинка после текущего
+        const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
+        if (!files.length) return;
+        e.preventDefault();
+        await flush();
+        const blank = isBlank();
+        const fresh = (await db.blocks.get(block.id))!;
+        await insertImages(block.docId, files, fresh);
+        if (blank) await deleteBlock(fresh);
+        ctx.setEditing(null);
+      }}
       onBlur={() => {
+        setTrig(null);
         flush();
         // если фокус ушёл не в другой блок — выходим из редактирования
         setTimeout(() => {
@@ -347,5 +545,7 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
         }, 0);
       }}
     />
+    {trig && <SuggestPopup items={suggestions} active={active} onPick={(i) => suggestions[i]?.apply()} hint={suggestHint} />}
+    </div>
   );
 }
