@@ -68,3 +68,17 @@ describe('сброс карточки', () => {
     expect(await db.reviewLogs.where('cardId').equals(c.id).count()).toBe(1);
   });
 });
+
+describe('отмена ответа', () => {
+  it('возвращает карточку и удаляет запись журнала', async () => {
+    const { answerCard, undoAnswer } = await import('../review/data');
+    const note = await createDoc('note', null, 'Н');
+    await appendBlock(note.id, 'text', 'q >> a');
+    const c = (await db.cards.toArray())[0];
+    const a = await answerCard(c, 1);
+    expect((await db.cards.get(c.id))!.reps).toBe(1);
+    await undoAnswer(a);
+    expect(await db.cards.get(c.id)).toEqual(c);
+    expect(await db.reviewLogs.count()).toBe(0);
+  });
+});

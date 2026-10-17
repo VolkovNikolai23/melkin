@@ -153,3 +153,41 @@ export function countDueToday(cards: CardRow[], now: number, newLimitLeft: numbe
   }
   return { due, fresh: Math.min(fresh, newLimitLeft), total: due + Math.min(fresh, newLimitLeft) };
 }
+
+export interface DueCount {
+  /** Карточки повторения/изучения, срок которых наступил */
+  due: number;
+  /** Новые карточки (без учёта дневного лимита) */
+  fresh: number;
+}
+
+/** Сколько карточек к повторению в каждом документе. */
+export function dueByDoc(cards: CardRow[], now: number): Map<string, DueCount> {
+  const m = new Map<string, DueCount>();
+  for (const c of cards) {
+    if (c.disabled) continue;
+    const isFresh = isNew(c);
+    if (!isFresh && c.due > now) continue;
+    const e = m.get(c.docId) ?? { due: 0, fresh: 0 };
+    if (isFresh) e.fresh++;
+    else e.due++;
+    m.set(c.docId, e);
+  }
+  return m;
+}
+
+/** Сумма по набору документов (папка = все вложенные документы). */
+export function sumDue(byDoc: Map<string, DueCount>, docIds: Iterable<string>): DueCount {
+  const s = { due: 0, fresh: 0 };
+  for (const id of docIds) {
+    const e = byDoc.get(id);
+    if (e) {
+      s.due += e.due;
+      s.fresh += e.fresh;
+    }
+  }
+  return s;
+}
+
+/** Число для значка: просроченные + новые в пределах оставшегося дневного лимита. */
+export const badgeCount = (d: DueCount, newLimitLeft: number) => d.due + Math.min(d.fresh, newLimitLeft);

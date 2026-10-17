@@ -56,11 +56,26 @@ export async function newLimitLeft(now = Date.now()) {
   return newAllowance(settings.newPerDay, await newDoneToday(now));
 }
 
-export async function answerCard(card: CardRow, rating: Grade, now = Date.now()): Promise<CardRow> {
+export interface Answer {
+  before: CardRow;
+  updated: CardRow;
+  logId: string;
+  rating: Grade;
+}
+
+export async function answerCard(card: CardRow, rating: Grade, now = Date.now()): Promise<Answer> {
   const { card: updated, log } = applyRating(card, rating, now);
   await db.transaction('rw', db.cards, db.reviewLogs, async () => {
     await db.cards.put(updated);
     await db.reviewLogs.add(log);
   });
-  return updated;
+  return { before: card, updated, logId: log.id, rating };
+}
+
+/** Отмена ответа: карточка возвращается в прежнее состояние, запись журнала удаляется. */
+export async function undoAnswer(a: Answer) {
+  await db.transaction('rw', db.cards, db.reviewLogs, async () => {
+    await db.cards.put(a.before);
+    await db.reviewLogs.delete(a.logId);
+  });
 }

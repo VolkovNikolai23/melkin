@@ -8,6 +8,7 @@ import { DocPage } from './features/notes/DocPage';
 import { SearchView } from './features/notes/SearchView';
 import { Sidebar } from './features/notes/Sidebar';
 import { ReviewView } from './features/review/ReviewView';
+import { ReviewHome } from './features/review/ReviewHome';
 import { TagPage, TagsView } from './features/links/LinkViews';
 import { useKeyboardInset } from './lib/keyboard';
 import { useRoute } from './lib/router';
@@ -53,14 +54,15 @@ export function App() {
 
   let view;
   if (name === 'doc' && id) view = <DocPage key={id} id={id} highlight={route.query.get('b')} />;
-  else if (name === 'review') view = <ReviewView scopeStr={route.query.get('scope')} />;
+  else if (name === 'review') view = route.query.get('scope') ? <ReviewView scopeStr={route.query.get('scope')} /> : <ReviewHome />;
   else if (name === 'search') view = <SearchView initial={route.query.get('q') ?? ''} />;
   else if (name === 'settings') view = <SettingsView />;
   else if (name === 'tags') view = <TagsView />;
   else if (name === 'tag' && id) view = <TagPage tag={id} />;
   else view = <Home />;
 
-  const inReview = name === 'review';
+  // во время сессии повторения боковая панель скрыта, на экране выбора очереди — видна
+  const inReview = name === 'review' && !!route.query.get('scope');
 
   return (
     <div className={'app' + (open ? ' sidebar-open' : '') + (narrow ? ' narrow' : '')}>
@@ -68,7 +70,7 @@ export function App() {
         <Sidebar
           activeId={activeId}
           routeName={routeName}
-          dueCount={due?.total ?? 0}
+          due={due}
           onNavigate={() => narrow && toggle(false)}
           onCollapse={() => toggle(false)}
         />

@@ -47,7 +47,7 @@ export function Home() {
             )}
           </div>
         </div>
-        <button className="btn primary big" disabled={!due?.total} onClick={() => navigate('review')}>
+        <button className="btn primary big" disabled={!due?.total} onClick={() => navigate('review?scope=all')}>
           <Icon name="cards" /> Повторить
         </button>
       </section>

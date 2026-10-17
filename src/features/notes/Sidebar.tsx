@@ -9,9 +9,14 @@ import { navigate } from '../../lib/router';
 import { beginDrag } from '../../components/dnd';
 import { TYPE_ICON } from './docIcons';
 import { getOrCreateDaily } from './daily';
+import { badgeCount, sumDue, type DueCount } from '../review/scheduler';
+import { createContext, useContext } from 'react';
 import { setTemplate } from './templates';
 import { collectSubtree, createDoc, deleteDoc, moveDoc, moveDocTo, renameDoc, shiftDoc, sortDocs } from './docs';
 
+
+// Счётчики к повторению по документам (передаются вниз по дереву без лишних пропсов)
+const DueCtx = createContext<{ byDoc: Map<string, DueCount>; newLeft: number } | null>(null);
 
 async function create(type: DocType, parentId: string | null) {
   const doc = await createDoc(type, parentId);
@@ -39,6 +44,8 @@ async function moveDialog(doc: Doc, docs: Doc[]) {
 function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: Doc[]; depth: number; activeId: string | null; onNavigate: () => void }) {
   const kids = docs.filter((d) => d.parentId === doc.id).sort(sortDocs);
   const isFolder = doc.type === 'folder';
+  const dueCtx = useContext(DueCtx);
+  const dueN = dueCtx ? badgeCount(sumDue(dueCtx.byDoc, isFolder ? collectSubtree(docs, doc.id) : [doc.id]), dueCtx.newLeft) : 0;
 
   const items: MenuItem[] = [
     ...(isFolder
@@ -106,6 +113,11 @@ function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: 
         <Icon name={TYPE_ICON[doc.type]} size={18} />
         <span className="tree-title">{doc.title || 'Без названия'}</span>
         {doc.isTemplate && <span className="tree-badge">шаблон</span>}
+        {dueN > 0 && (
+          <span className="tree-due" title="Карточек к повторению">
+            {dueN}
+          </span>
+        )}
         <MenuButton items={items} />
       </div>
       {isFolder && !doc.collapsed && (
@@ -124,7 +136,20 @@ function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: 
   );
 }
 
-export function Sidebar({ activeId, routeName, dueCount, onNavigate, onCollapse }: { activeId: string | null; routeName: string; dueCount: number; onNavigate: () => void; onCollapse: () => void }) {
+export function Sidebar({
+  activeId,
+  routeName,
+  due,
+  onNavigate,
+  onCollapse,
+}: {
+  activeId: string | null;
+  routeName: string;
+  due: { total: number; byDoc: Map<string, DueCount>; newLeft: number } | undefined;
+  onNavigate: () => void;
+  onCollapse: () => void;
+}) {
+  const dueCount = due?.total ?? 0;
   const docs = useLiveQuery(() => db.docs.toArray(), []);
   const [q, setQ] = useState('');
   const roots = (docs ?? []).filter((d) => d.parentId === null).sort(sortDocs);
@@ -184,6 +209,7 @@ export function Sidebar({ activeId, routeName, dueCount, onNavigate, onCollapse 
         </button>
       </nav>
 
+      <DueCtx.Provider value={due ? { byDoc: due.byDoc, newLeft: due.newLeft } : null}>
       <div className="tree">
         <div className="tree-label">Документы</div>
         {roots.map((d) => (
@@ -191,6 +217,7 @@ export function Sidebar({ activeId, routeName, dueCount, onNavigate, onCollapse 
         ))}
         {docs && roots.length === 0 && <div className="tree-empty">Пока ничего нет</div>}
       </div>
+      </DueCtx.Provider>
 
       <div className="sidebar-foot">
         <button className="btn ghost small" onClick={() => create('note', null)}>

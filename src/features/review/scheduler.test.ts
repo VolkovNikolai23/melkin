@@ -108,3 +108,23 @@ describe('отключённые карточки', () => {
     expect(countDueToday([off], now, 20).total).toBe(0);
   });
 });
+
+describe('счётчики по документам', () => {
+  it('просроченные и новые по документам, будущие и отключённые не считаются', async () => {
+    const { dueByDoc, sumDue, badgeCount } = await import('./scheduler');
+    const card = (id: string, docId: string, extra: object) => ({ ...mk(id), docId, ...extra });
+    const cards = [
+      card('a', 'd1', {}),
+      card('b', 'd1', { state: State.Review, due: now - 1 }),
+      card('c', 'd1', { state: State.Review, due: now + 1e6 }),
+      card('d', 'd2', {}),
+      card('e', 'd2', { disabled: true }),
+    ];
+    const m = dueByDoc(cards, now);
+    expect(m.get('d1')).toEqual({ due: 1, fresh: 1 });
+    expect(m.get('d2')).toEqual({ due: 0, fresh: 1 });
+    const folder = sumDue(m, ['d1', 'd2', 'нет']);
+    expect(folder).toEqual({ due: 1, fresh: 2 });
+    expect(badgeCount(folder, 1)).toBe(2); // лимит новых ограничивает значок
+  });
+});
