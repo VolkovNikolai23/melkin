@@ -2393,3 +2393,34 @@ button.card-badge {
   opacity: 0.55;
   font-style: italic;
 }
+
+/* Длинные документы: браузер не раскладывает и не рисует строки за пределами экрана */
+.outliner > .block {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
+}
+
+.pwa-banner {
+  position: fixed;
+  z-index: 150;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(16px + var(--safe-bottom));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(560px, calc(100vw - 24px));
+  padding: 10px 12px 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  font-size: 15px;
+}
+.pwa-banner > span {
+  flex: 1;
+}
+.pwa-banner > .icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}

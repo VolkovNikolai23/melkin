@@ -1,10 +1,10 @@
 {
   "name": "melkin",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
+    "dev": "vite --host --port 5174 --strictPort",
     "build": "tsc --noEmit -p . && vite build",
     "preview": "vite preview --host",
     "test": "vitest run",

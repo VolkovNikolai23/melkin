@@ -98,10 +98,33 @@ export async function syncBlockCards(blockId: string) {
   });
 }
 
-/** Полная пересборка всех карточек (после миграции схемы или импорта). */
+/**
+ * Полная пересборка всех карточек (после миграции схемы или импорта).
+ * Один проход и одна транзакция: на тысячах блоков это в десятки раз быстрее поблочной синхронизации.
+ */
 export async function resyncAllCards() {
-  const ids = await db.blocks.toCollection().primaryKeys();
-  for (const id of ids) await syncBlockCards(id as string);
+  await db.transaction('rw', db.blocks, db.cards, db.docs, async () => {
+    const [blocks, cards, docs] = await Promise.all([db.blocks.toArray(), db.cards.toArray(), db.docs.toArray()]);
+    const byId = new Map(blocks.map((b) => [b.id, b]));
+    const templates = new Set(docs.filter((d) => d.isTemplate).map((d) => d.id));
+    const cardsByBlock = new Map<string, CardRow[]>();
+    for (const c of cards) cardsByBlock.set(c.blockId, [...(cardsByBlock.get(c.blockId) ?? []), c]);
+    const now = Date.now();
+    const put: CardRow[] = [];
+    const remove: string[] = [];
+    for (const b of blocks) {
+      const parentText = b.parentId ? byId.get(b.parentId)?.text : undefined;
+      const parsed = b.kind === 'text' ? parseCards(b.text, { parentText }) : b.kind === 'image' ? occlusionCards(b.image, { parentText }) : [];
+      const plan = planCardSync(b.id, b.docId, parsed, cardsByBlock.get(b.id) ?? [], now, !!b.cardsOff || templates.has(b.docId));
+      put.push(...plan.put);
+      remove.push(...plan.remove);
+      cardsByBlock.delete(b.id);
+    }
+    // карточки удалённых блоков
+    for (const rest of cardsByBlock.values()) remove.push(...rest.map((c) => c.id));
+    if (remove.length) await db.cards.bulkDelete(remove);
+    if (put.length) await db.cards.bulkPut(put);
+  });
 }
 
 /** Сбросить прогресс карточки: она снова станет новой (журнал повторений сохраняется). */

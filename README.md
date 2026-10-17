@@ -6,7 +6,7 @@
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173 (и адрес в локальной сети — для iPad)
+npm run dev      # http://localhost:5174 (и адрес в локальной сети — для iPad)
 npm test         # тесты парсера карточек и логики повторения
 npm run build    # production-сборка в dist/
 ```
@@ -19,9 +19,24 @@ npm run build    # production-сборка в dist/
 
 ## Деплой на GitHub Pages
 
-1. Создайте репозиторий на GitHub и запушьте проект в ветку `main`.
-2. В репозитории: Settings → Pages → Source: **GitHub Actions**.
-3. Workflow `.github/workflows/deploy.yml` сам прогонит тесты, соберёт проект с правильным `base` (`/<имя-репозитория>/`) и опубликует его.
+1. На github.com создайте **пустой публичный** репозиторий (например, `melkin`) — без README и .gitignore.
+2. В терминале в папке проекта:
+   ```bash
+   git remote add origin https://github.com/<логин>/melkin.git
+   git push -u origin main
+   ```
+   При первом push GitHub попросит войти: логин и **токен** вместо пароля (Settings → Developer settings → Personal access tokens), либо войдите через GitHub Desktop.
+3. В репозитории: **Settings → Pages → Source: GitHub Actions**.
+4. Workflow `.github/workflows/deploy.yml` прогонит тесты, соберёт проект с адресом `/<имя-репозитория>/` и опубликует его. Адрес: `https://<логин>.github.io/melkin/`.
+5. Каждый следующий `git push` в `main` обновляет сайт. В открытом приложении появится плашка «Доступна новая версия» — нажмите «Обновить».
+
+### Перенос данных
+
+Данные хранятся в браузере **отдельно для каждого адреса**: у `localhost:5174` на Mac, у сайта на GitHub Pages и у приложения на iPad — свои базы. Чтобы перенести конспекты: «Настройки и копии» → «Сохранить копию» (.zip) на старом месте → «Восстановить из файла» на новом.
+
+### Офлайн
+
+После первого открытия сайта приложение сохраняется целиком (≈7 МБ: интерфейс, шрифты KaTeX, pdf.js) и дальше работает без интернета. На iPad установите его через «Поделиться → На экран „Домой“» — так iPadOS не удалит данные.
 
 ## Синтаксис
 

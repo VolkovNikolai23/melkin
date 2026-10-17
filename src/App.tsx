@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { DialogHost } from './components/dialog';
+import { PwaBanners } from './components/pwa';
 import { Home } from './components/Home';
 import { Icon } from './components/Icon';
 import { SettingsView } from './components/SettingsView';
@@ -86,6 +87,7 @@ export function App() {
         )}
         <div className="main-scroll">{view}</div>
       </main>
+      <PwaBanners />
       <DialogHost />
     </div>
   );

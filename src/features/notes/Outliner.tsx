@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { beginDrag } from '../../components/dnd';
 import { Icon, type IconName } from '../../components/Icon';
 import { MenuButton, type MenuItem } from '../../components/Menu';
@@ -11,14 +11,15 @@ import { navigate } from '../../lib/router';
 import { InkBlock } from '../ink/InkBlock';
 import { InkToolbar } from '../ink/InkToolbar';
 import { BlockEditor } from './BlockEditor';
-import { appendBlock, childrenMap, deleteBlock, indent, insertAfter, moveBlock, moveBlockTo, outdent, setCollapsed, visibleOrder } from './blocks';
+import { appendBlock, deleteBlock, indent, insertAfter, moveBlock, moveBlockTo, outdent, setCollapsed } from './blocks';
 import { createDoc } from './docs';
 import { CodeBlock } from './CodeBlock';
 import { ImageBlock } from './ImageBlock';
 import { insertImages, pickFiles } from './images';
 import { PropsView } from './PropsView';
 import { CardsPanel } from '../cards/CardsPanel';
-import { OutlinerContext, useOutliner, type Caret, type EditorAction, type OutlinerCtx } from './outlinerContext';
+import { OutlinerContext, useOutliner, type EditorAction, type OutlinerCtx } from './outlinerContext';
+import { OutlinerStore, useBlockSlice, useStoreValue } from './outlinerStore';
 import { HIGHLIGHT_COLORS, renderText } from './render';
 
 const RenderedText = memo(function RenderedText({ text }: { text: string }) {
@@ -35,21 +36,26 @@ export async function openLink(title: string) {
   navigate(`doc/${(doc ?? (await createDoc('note', null, title.trim()))).id}`);
 }
 
-/** Номер пункта нумерованного списка: считаем подряд идущих соседей с нумерацией. */
-function listNumber(block: Block, siblings: Block[]): number {
-  const i = siblings.findIndex((s) => s.id === block.id);
-  let n = 1;
-  for (let j = i - 1; j >= 0 && siblings[j].list === 'number'; j--) n++;
-  return n;
-}
+/** Строка outliner'а. Подписана только на свои данные — см. outlinerStore. */
+export const BlockItem = memo(function BlockItem({ id }: { id: string }) {
+  const ctx = useOutliner() as OutlinerStore;
+  const slice = useBlockSlice(ctx, id);
+  if (!slice.block) return null;
+  return <BlockRow ctx={ctx} {...slice} block={slice.block} />;
+});
 
-export function BlockItem({ block }: { block: Block }) {
-  const ctx = useOutliner();
-  const kids = ctx.kids.get(block.id) ?? [];
-  const editing = ctx.editing?.id === block.id;
-  const cards = ctx.cardCount.get(block.id) ?? 0;
+function BlockRow({
+  ctx,
+  block,
+  kids,
+  editing: caret,
+  cards,
+  propsOpen,
+  highlighted,
+  number,
+}: { ctx: OutlinerStore; block: Block } & Omit<ReturnType<typeof useBlockSlice>, 'block'>) {
+  const editing = caret !== null;
   const rowRef = useRef<HTMLDivElement>(null);
-  const highlighted = ctx.highlight === block.id;
   const [cardsOpen, setCardsOpen] = useState(false);
 
   useEffect(() => {
@@ -94,8 +100,7 @@ export function BlockItem({ block }: { block: Block }) {
     },
   ];
 
-  const siblings = ctx.kids.get(block.parentId) ?? [];
-  const numbered = block.list === 'number';
+  const numbered = number !== null;
 
   return (
     <div className="block">
@@ -116,7 +121,7 @@ export function BlockItem({ block }: { block: Block }) {
           onPointerDown={onBulletDown}
           onClick={() => (kids.length ? setCollapsed(block.id, !block.collapsed) : block.kind === 'text' && ctx.setEditing({ id: block.id, caret: 'end' }))}
         >
-          {numbered ? <span className="num">{listNumber(block, siblings)}.</span> : <span className="dot" />}
+          {numbered ? <span className="num">{number}.</span> : <span className="dot" />}
         </button>
         <div className="block-body">
           {block.kind === 'ink' ? (
@@ -128,7 +133,7 @@ export function BlockItem({ block }: { block: Block }) {
           ) : block.kind === 'portal' ? (
             <PortalBlock block={block} />
           ) : editing ? (
-            <BlockEditor block={block} caret={ctx.editing!.caret} />
+            <BlockEditor block={block} caret={caret!} />
           ) : (
             <div
               className="block-text"
@@ -155,7 +160,7 @@ export function BlockItem({ block }: { block: Block }) {
           )}
           <PropsView
             block={block}
-            open={ctx.propsOpen === block.id}
+            open={propsOpen}
             onOpen={() => ctx.setPropsOpen(block.id)}
             onClose={() => ctx.setPropsOpen(null)}
           />
@@ -176,7 +181,7 @@ export function BlockItem({ block }: { block: Block }) {
       {kids.length > 0 && !block.collapsed && (
         <div className="block-children">
           {kids.map((k) => (
-            <BlockItem key={k.id} block={k} />
+            <BlockItem key={k.id} id={k.id} />
           ))}
         </div>
       )}
@@ -247,21 +252,20 @@ function EditToolbar({ api }: { api: OutlinerCtx['editorApi'] }) {
   );
 }
 
-/** Состояние outliner'а для документа: дерево блоков, редактирование, счётчики карточек. */
-function useOutlinerState(docId: string, highlight: string | null): OutlinerCtx | null {
+const NO_BLOCKS: Block[] = [];
+
+/** Хранилище outliner'а для документа: данные из IndexedDB, редактирование, подсветка. */
+function useOutlinerStore(docId: string, highlight: string | null): OutlinerStore | null {
+  const store = useMemo(() => new OutlinerStore(docId), [docId]);
   const blocks = useLiveQuery(() => db.blocks.where('docId').equals(docId).toArray(), [docId]);
   const cards = useLiveQuery(() => db.cards.where('docId').equals(docId).toArray(), [docId]);
-  const [editing, setEditing] = useState<{ id: string; caret: Caret } | null>(null);
-  const [propsOpen, setPropsOpen] = useState<string | null>(null);
-  const editorApi = useRef<((a: EditorAction) => void) | null>(null);
+  const loaded = useStoreValue(store, (s) => s.loaded);
 
-  const kids = useMemo(() => childrenMap(blocks ?? []), [blocks]);
-  const visible = useMemo(() => visibleOrder(kids), [kids]);
-  const cardCount = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const c of cards ?? []) m.set(c.blockId, (m.get(c.blockId) ?? 0) + 1);
-    return m;
-  }, [cards]);
+  useLayoutEffect(() => {
+    if (blocks && cards) store.setData(blocks, cards);
+  }, [store, blocks, cards]);
+
+  useEffect(() => store.setHighlight(highlight), [store, highlight]);
 
   // Переход из поиска/карточки: раскрываем свёрнутых предков найденного блока
   useEffect(() => {
@@ -275,13 +279,7 @@ function useOutlinerState(docId: string, highlight: string | null): OutlinerCtx 
     }
   }, [highlight, blocks]);
 
-  useEffect(() => {
-    setEditing(null);
-    setPropsOpen(null);
-  }, [docId]);
-
-  if (!blocks) return null;
-  return { docId, kids, visible, editing, setEditing, cardCount, highlight, editorApi, propsOpen, setPropsOpen };
+  return loaded ? store : null;
 }
 
 // Цепочка порталов, внутри которых мы находимся: защита от бесконечной вложенности.
@@ -308,24 +306,38 @@ function PortalBlock({ block }: { block: Block }) {
 }
 
 function PortalOutline({ docId, rootId }: { docId: string; rootId: string }) {
-  const ctx = useOutlinerState(docId, null);
-  const root = ctx?.visible.find((b) => b.id === rootId) ?? (ctx ? [...ctx.kids.values()].flat().find((b) => b.id === rootId) : undefined);
-  if (!ctx || !root) return null;
+  const store = useOutlinerStore(docId, null);
+  if (!store) return null;
+  return <PortalBody store={store} rootId={rootId} />;
+}
+
+function PortalBody({ store, rootId }: { store: OutlinerStore; rootId: string }) {
+  const exists = useStoreValue(store, (s) => s.blocks.has(rootId));
+  const editing = useStoreValue(store, (s) => s.editing !== null);
+  if (!exists) return null;
   return (
-    <OutlinerContext.Provider value={ctx}>
-      <BlockItem block={root} />
-      {ctx.editing && <EditToolbar api={ctx.editorApi} />}
+    <OutlinerContext.Provider value={store}>
+      <BlockItem id={rootId} />
+      {editing && <EditToolbar api={store.editorApi} />}
     </OutlinerContext.Provider>
   );
 }
 
 export function Outliner({ docId, highlight }: { docId: string; highlight: string | null }) {
-  const ctx = useOutlinerState(docId, highlight);
+  const store = useOutlinerStore(docId, highlight);
+  if (!store) return null;
+  return <OutlinerBody store={store} docId={docId} />;
+}
+
+function OutlinerBody({ store, docId }: { store: OutlinerStore; docId: string }) {
   const [dropping, setDropping] = useState(false);
-  if (!ctx) return null;
-  const { kids, editing, setEditing, editorApi } = ctx;
-  const roots = kids.get(null) ?? [];
-  const hasInk = [...kids.values()].some((l) => l.some((b) => b.kind === 'ink'));
+  const roots = useStoreValue(store, (s) => s.kids.get(null) ?? NO_BLOCKS);
+  const editing = useStoreValue(store, (s) => s.editing !== null);
+  const hasInk = useStoreValue(store, (s) => {
+    for (const b of s.blocks.values()) if (b.kind === 'ink') return true;
+    return false;
+  });
+  const { setEditing, editorApi } = store;
 
   const addText = async () => {
     keepKeyboard();
@@ -345,7 +357,7 @@ export function Outliner({ docId, highlight }: { docId: string; highlight: strin
   };
 
   return (
-    <OutlinerContext.Provider value={ctx}>
+    <OutlinerContext.Provider value={store}>
       <div
         className={'outliner' + (dropping ? ' file-over' : '')}
         onDragOver={(e) => {
@@ -358,7 +370,7 @@ export function Outliner({ docId, highlight }: { docId: string; highlight: strin
         onDrop={onDrop}
       >
         {roots.map((b) => (
-          <BlockItem key={b.id} block={b} />
+          <BlockItem key={b.id} id={b.id} />
         ))}
         {roots.length === 0 && (
           <button className="empty-doc" onClick={addText}>
