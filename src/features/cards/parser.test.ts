@@ -179,3 +179,25 @@ describe('planCardSync', () => {
     expect(r.put[0]).toMatchObject({ disabled: true, reps: 3 });
   });
 });
+
+describe('image occlusion', () => {
+  const rect = (id: string) => ({ id, x: 0.1, y: 0.1, w: 0.2, h: 0.1 });
+  const image = { fileId: 'f', width: 100, height: 100, occlusions: [rect('r1'), rect('r2')] };
+
+  it('по карточке на каждую область, ключ — id области', async () => {
+    const { occlusionCards } = await import('./parser');
+    const c = occlusionCards(image, { parentText: 'Строение клетки #био' });
+    expect(c.map((x) => x.key)).toEqual(['occ:r1', 'occ:r2']);
+    expect(c[0]).toMatchObject({ kind: 'occlusion', front: 'Строение клетки', sub: 'r1', clozeIndex: 0 });
+  });
+
+  it('удаление области удаляет только её карточку', async () => {
+    const { occlusionCards } = await import('./parser');
+    const now = 1;
+    const existing = occlusionCards(image).map((p) => ({ ...newCardRow('b', 'd', p, now), reps: 2 }));
+    const r = planCardSync('b', 'd', occlusionCards({ ...image, occlusions: [rect('r2')] }), existing, now);
+    expect(r.remove).toEqual(['b#occ:r1']);
+    expect(r.put.map((c) => c.id)).toEqual(['b#occ:r2']); // сдвинулся номер, история сохранена
+    expect(r.put[0].reps).toBe(2);
+  });
+});

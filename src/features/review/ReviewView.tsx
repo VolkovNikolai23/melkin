@@ -82,7 +82,7 @@ export function ReviewView({ scopeStr }: { scopeStr: string | null }) {
   // Клавиатура: пробел/Enter — показать ответ, 1–4 — оценка
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.closest('input, textarea')) return;
+      if (e.target instanceof Element && e.target.closest('input, textarea, select')) return;
       if (!revealed && (e.key === ' ' || e.key === 'Enter')) {
         e.preventDefault();
         setRevealed(true);

@@ -53,3 +53,18 @@ describe('шаблоны', () => {
     expect(noteCards[0].disabled).toBeFalsy();
   });
 });
+
+describe('сброс карточки', () => {
+  it('карточка снова новая, журнал повторений остаётся', async () => {
+    const { answerCard } = await import('../review/data');
+    const { resetCard } = await import('../cards/sync');
+    const note = await createDoc('note', null, 'Н');
+    await appendBlock(note.id, 'text', 'q >> a');
+    const c = (await db.cards.toArray())[0];
+    await answerCard(c, 3);
+    expect((await db.cards.get(c.id))!.reps).toBe(1);
+    await resetCard(c.id);
+    expect(await db.cards.get(c.id)).toMatchObject({ reps: 0, state: 0, last_review: null });
+    expect(await db.reviewLogs.where('cardId').equals(c.id).count()).toBe(1);
+  });
+});

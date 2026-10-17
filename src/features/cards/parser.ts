@@ -1,4 +1,4 @@
-import type { CardKind } from '../../db/schema';
+import type { CardKind, ImageData } from '../../db/schema';
 import { analyze, type SepKind } from '../../lib/markup';
 
 export { hashString } from '../../lib/markup';
@@ -17,6 +17,17 @@ export interface ParsedCard {
 export interface ParseContext {
   /** Текст родительского блока — нужен для описаний (;;) */
   parentText?: string;
+}
+
+/**
+ * Image occlusion: по карточке на каждый прямоугольник. Ключ — id прямоугольника,
+ * поэтому перемещение/изменение области сохраняет историю, а удаление — убирает карточку.
+ * Вопросом служит название родителя (например «Строение клетки»), если оно есть.
+ */
+export function occlusionCards(image: ImageData | undefined, ctx: ParseContext = {}): ParsedCard[] {
+  const rects = image?.occlusions ?? [];
+  const title = ctx.parentText ? conceptName(ctx.parentText) : '';
+  return rects.map((r, i) => ({ key: `occ:${r.id}`, kind: 'occlusion' as const, front: title, back: '', clozeIndex: i, sub: r.id }));
 }
 
 /** Теги — служебные метки блока, в тексте карточки они не нужны. */

@@ -59,6 +59,11 @@ export interface ImageData {
   displayWidth?: number;
   /** Прямоугольники image occlusion; каждый — отдельная карточка */
   occlusions?: Rect[];
+  /**
+   * 'hideAll' — на вопросе скрыты все области, в ответе открывается проверяемая;
+   * 'hideOne' — скрыта только проверяемая область (по умолчанию).
+   */
+  occlusionMode?: 'hideOne' | 'hideAll';
 }
 
 export interface PdfRef {

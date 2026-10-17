@@ -17,6 +17,7 @@ import { CodeBlock } from './CodeBlock';
 import { ImageBlock } from './ImageBlock';
 import { insertImages, pickFiles } from './images';
 import { PropsView } from './PropsView';
+import { CardsPanel } from '../cards/CardsPanel';
 import { OutlinerContext, useOutliner, type Caret, type EditorAction, type OutlinerCtx } from './outlinerContext';
 import { HIGHLIGHT_COLORS, renderText } from './render';
 
@@ -48,6 +49,7 @@ export function BlockItem({ block }: { block: Block }) {
   const cards = ctx.cardCount.get(block.id) ?? 0;
   const rowRef = useRef<HTMLDivElement>(null);
   const highlighted = ctx.highlight === block.id;
+  const [cardsOpen, setCardsOpen] = useState(false);
 
   useEffect(() => {
     if (highlighted) rowRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -139,13 +141,18 @@ export function BlockItem({ block }: { block: Block }) {
           />
         </div>
         {cards > 0 && !editing && (
-          <span className={'card-badge' + (block.cardsOff ? ' off' : '')} title={block.cardsOff ? 'Карточки отключены' : 'Карточек в блоке'}>
+          <button
+            className={'card-badge' + (block.cardsOff ? ' off' : '')}
+            title={block.cardsOff ? 'Карточки отключены' : 'Карточки блока'}
+            onClick={() => setCardsOpen((o) => !o)}
+          >
             <Icon name={block.cardsOff ? 'cardOff' : 'cards'} size={14} />
             {cards > 1 ? cards : ''}
-          </span>
+          </button>
         )}
         {(block.kind === 'ink' || block.kind === 'portal') && <MenuButton items={inkMenu} label="Действия с блоком" />}
       </div>
+      {cardsOpen && <CardsPanel block={block} onClose={() => setCardsOpen(false)} />}
       {kids.length > 0 && !block.collapsed && (
         <div className="block-children">
           {kids.map((k) => (

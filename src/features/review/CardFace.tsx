@@ -125,7 +125,7 @@ export function CardFace({ card, revealed, onReveal }: { card: CardRow; revealed
     [card],
   );
   const children = (data?.kids.get(card.blockId) ?? []) as Block[];
-  const label = { forward: '', backward: ' · обратная', cloze: '', list: ' · список', mcq: ' · выбор ответа', occlusion: '' }[card.kind];
+  const label = { forward: '', backward: ' · обратная', cloze: '', list: ' · список', mcq: ' · выбор ответа', occlusion: ' · области на картинке' }[card.kind];
 
   return (
     <div className="card-face">
@@ -135,7 +135,12 @@ export function CardFace({ card, revealed, onReveal }: { card: CardRow; revealed
           {label}
         </div>
       )}
-      <Html className="card-front" html={front} />
+      {front && <Html className="card-front" html={front} />}
+      {card.kind === 'occlusion' && data?.block.kind === 'image' && (
+        <div className="card-occlusion">
+          <ImageBlock block={data.block} readOnly target={card.sub} revealed={revealed} />
+        </div>
+      )}
       {card.kind === 'mcq' && data && children.length > 0 && <Choices options={children} correctId={children[0].id} revealed={revealed} onReveal={onReveal} />}
       {revealed && card.kind === 'list' && data && (
         <div className="card-back">

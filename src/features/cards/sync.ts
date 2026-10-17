@@ -1,7 +1,7 @@
 import { createEmptyCard } from 'ts-fsrs';
 import { db } from '../../db/db';
 import type { Block, CardRow } from '../../db/schema';
-import { parseCards, type ParsedCard } from './parser';
+import { occlusionCards, parseCards, type ParsedCard } from './parser';
 
 export const cardId = (blockId: string, key: string) => `${blockId}#${key}`;
 
@@ -67,9 +67,9 @@ export function planCardSync(
 async function syncOne(block: Block | undefined, blockId: string) {
   const existing = await db.cards.where('blockId').equals(blockId).toArray();
   let parsed: ParsedCard[] = [];
-  if (block && block.kind === 'text') {
+  if (block && (block.kind === 'text' || block.kind === 'image')) {
     const parent = block.parentId ? await db.blocks.get(block.parentId) : undefined;
-    parsed = parseCards(block.text, { parentText: parent?.text });
+    parsed = block.kind === 'text' ? parseCards(block.text, { parentText: parent?.text }) : occlusionCards(block.image, { parentText: parent?.text });
   }
   // Карточки шаблонов не повторяем — они оживают в копиях
   const doc = block ? await db.docs.get(block.docId) : undefined;
@@ -88,7 +88,12 @@ export async function syncBlockCards(blockId: string) {
     const block = await db.blocks.get(blockId);
     await syncOne(block, blockId);
     if (!block) return;
-    const kids = await db.blocks.where('parentId').equals(blockId).filter((b) => b.text.includes(';;')).toArray();
+    // дети, чей текст карточки зависит от родителя: описания (;;) и области на картинках
+    const kids = await db.blocks
+      .where('parentId')
+      .equals(blockId)
+      .filter((b) => b.text.includes(';;') || !!b.image?.occlusions?.length)
+      .toArray();
     for (const k of kids) await syncOne(k, k.id);
   });
 }
@@ -97,4 +102,23 @@ export async function syncBlockCards(blockId: string) {
 export async function resyncAllCards() {
   const ids = await db.blocks.toCollection().primaryKeys();
   for (const id of ids) await syncBlockCards(id as string);
+}
+
+/** Сбросить прогресс карточки: она снова станет новой (журнал повторений сохраняется). */
+export async function resetCard(id: string) {
+  const c = await db.cards.get(id);
+  if (!c) return;
+  const e = createEmptyCard(new Date());
+  await db.cards.update(id, {
+    due: e.due.getTime(),
+    stability: e.stability,
+    difficulty: e.difficulty,
+    elapsed_days: e.elapsed_days,
+    scheduled_days: e.scheduled_days,
+    learning_steps: e.learning_steps,
+    reps: e.reps,
+    lapses: e.lapses,
+    state: e.state,
+    last_review: null,
+  });
 }
