@@ -222,7 +222,7 @@ export default function PdfView({ doc, initialPage, flashId }: { doc: Doc; initi
     return chooseTarget();
   };
   const chooseTarget = async (): Promise<string | null> => {
-    const notes = (await db.docs.filter((d) => d.type === 'note' || d.type === 'daily').toArray()).sort((a, b) => b.updatedAt - a.updatedAt);
+    const notes = (await db.docs.filter((d) => (d.type === 'note' || d.type === 'daily') && !d.deletedAt).toArray()).sort((a, b) => b.updatedAt - a.updatedAt);
     const choice = await dialog.select(
       'Куда отправлять выделения из этого PDF?',
       [{ value: '__new', label: `Новый конспект «Конспект: ${doc.title}»` }, ...notes.map((d) => ({ value: d.id, label: d.title }))],

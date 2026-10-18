@@ -63,7 +63,8 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
   const updateTrigger = () => {
     const ta = ref.current;
     if (!ta) return;
-    const t = ta.selectionStart === ta.selectionEnd ? detectTrigger(textRef.current, ta.selectionStart) : null;
+    const found = ta.selectionStart === ta.selectionEnd ? detectTrigger(textRef.current, ta.selectionStart) : null;
+    const t = found?.kind === 'tag' ? null : found; // подсказки тегов отключены (теги не нужны)
     if (!t) dismissed.current = null;
     const next = t && dismissed.current === t.start ? null : t;
     setTrig((prev) => (prev?.kind === next?.kind && prev?.start === next?.start && prev?.query === next?.query ? prev : next));

@@ -1,69 +1,88 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
+import { beginDrag } from '../../components/dnd';
 import { Icon } from '../../components/Icon';
+import { pickIconAndColor } from '../../components/IconPicker';
 import { MenuButton, type MenuItem } from '../../components/Menu';
 import { dialog } from '../../components/dialog';
 import { db } from '../../db/db';
-import type { Doc, DocType } from '../../db/schema';
+import type { Doc, DocType, FolderRole } from '../../db/schema';
 import { navigate } from '../../lib/router';
-import { beginDrag } from '../../components/dnd';
-import { TYPE_ICON } from './docIcons';
-import { getOrCreateDaily } from './daily';
-import { pickFiles } from './images';
 import { importPdf } from '../pdf/annotations';
 import { badgeCount, sumDue, type DueCount } from '../review/scheduler';
-import { createContext, useContext } from 'react';
+import { docIcon } from './docIcons';
+import { collectSubtree, createDoc, createFolder, isContainer, isLive, moveDoc, moveDocTo, renameDoc, shiftDoc, sortDocs, trashDoc } from './docs';
+import { pickFiles } from './images';
 import { setTemplate } from './templates';
-import { collectSubtree, createDoc, deleteDoc, moveDoc, moveDocTo, renameDoc, shiftDoc, sortDocs } from './docs';
-
 
 // Счётчики к повторению по документам (передаются вниз по дереву без лишних пропсов)
 const DueCtx = createContext<{ byDoc: Map<string, DueCount>; newLeft: number } | null>(null);
 
-async function create(type: DocType, parentId: string | null) {
+const NEW_TITLE: Record<string, string> = { subject: 'Название предмета', topic: 'Название темы', lecture: 'Название лекции', folder: 'Название папки' };
+
+/** Создать документ; папкам, предметам, темам и лекциям сразу спрашиваем название. */
+async function create(type: DocType, parentId: string | null, role?: FolderRole) {
   if (type === 'pdf') {
     const [file] = await pickFiles('application/pdf,.pdf', false);
     if (file) navigate(`doc/${(await importPdf(file, parentId)).id}`);
     return;
   }
-  const doc = await createDoc(type, parentId);
-  if (type === 'folder') {
-    const name = await dialog.prompt('Название папки', doc.title);
-    if (name?.trim()) await renameDoc(doc.id, name.trim());
-  } else navigate(`doc/${doc.id}`);
+  const askName = type === 'folder' || type === 'lecture';
+  let title: string | undefined;
+  if (askName) {
+    const t = await dialog.prompt(NEW_TITLE[role ?? type], '');
+    if (t === null) return;
+    title = t.trim() || undefined;
+  }
+  const doc = type === 'folder' ? await createFolder(role, parentId, title) : await createDoc(type, parentId, title);
+  if (type !== 'folder') navigate(`doc/${doc.id}`);
 }
 
 async function moveDialog(doc: Doc, docs: Doc[]) {
   const banned = new Set(collectSubtree(docs, doc.id));
-  const folders = docs.filter((d) => d.type === 'folder' && !banned.has(d.id));
+  const targets = docs.filter((d) => isContainer(d) && !banned.has(d.id));
   const path = (d: Doc): string => {
     const p = docs.find((x) => x.id === d.parentId);
     return p ? path(p) + ' / ' + d.title : d.title;
   };
   const target = await dialog.select(
     `Переместить «${doc.title}»`,
-    [{ value: '', label: '— Корень —' }, ...folders.map((f) => ({ value: f.id, label: path(f) })).sort((a, b) => a.label.localeCompare(b.label))],
+    [{ value: '', label: '— Корень —' }, ...targets.map((f) => ({ value: f.id, label: path(f) })).sort((a, b) => a.label.localeCompare(b.label))],
     doc.parentId ?? '',
   );
   if (target !== null) await moveDoc(doc.id, target || null);
 }
 
+function createItems(doc: Doc): MenuItem[] {
+  const id = doc.id;
+  if (doc.type === 'lecture')
+    return [
+      { label: 'Новая заметка', icon: 'note', onClick: () => create('note', id) },
+      { label: 'Импорт PDF / презентации', icon: 'pdf', onClick: () => create('pdf', id) },
+    ];
+  const base: MenuItem[] = [
+    { label: 'Новая заметка', icon: 'note', onClick: () => create('note', id) },
+    { label: 'Новая тетрадь', icon: 'notebook', onClick: () => create('notebook', id) },
+    { label: 'Импорт PDF', icon: 'pdf', onClick: () => create('pdf', id) },
+  ];
+  if (doc.role === 'subject')
+    return [{ label: 'Новая тема', icon: 'folderPlus', onClick: () => create('folder', id, 'topic') }, { label: 'Новая лекция', icon: 'lecture', onClick: () => create('lecture', id) }, ...base];
+  if (doc.role === 'topic') return [{ label: 'Новая лекция', icon: 'lecture', onClick: () => create('lecture', id) }, ...base, { label: 'Новая папка', icon: 'folder', onClick: () => create('folder', id) }];
+  return [...base, { label: 'Новая лекция', icon: 'lecture', onClick: () => create('lecture', id) }, { label: 'Новая папка', icon: 'folder', onClick: () => create('folder', id) }];
+}
+
 function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: Doc[]; depth: number; activeId: string | null; onNavigate: () => void }) {
-  const kids = docs.filter((d) => d.parentId === doc.id).sort(sortDocs);
   const isFolder = doc.type === 'folder';
+  // содержимое лекции (конспект, презентация) открывается во вкладках лекции, в дереве не дублируем
+  const kids = isFolder ? docs.filter((d) => d.parentId === doc.id).sort(sortDocs) : [];
   const dueCtx = useContext(DueCtx);
-  const dueN = dueCtx ? badgeCount(sumDue(dueCtx.byDoc, isFolder ? collectSubtree(docs, doc.id) : [doc.id]), dueCtx.newLeft) : 0;
+  const subtree = isFolder || doc.type === 'lecture' ? collectSubtree(docs, doc.id) : [doc.id];
+  const dueN = dueCtx ? badgeCount(sumDue(dueCtx.byDoc, subtree), dueCtx.newLeft) : 0;
+  const active = activeId !== null && (activeId === doc.id || (doc.type === 'lecture' && subtree.includes(activeId)));
 
   const items: MenuItem[] = [
-    ...(isFolder
-      ? [
-          { label: 'Новая заметка', icon: 'note' as const, onClick: () => create('note', doc.id) },
-          { label: 'Новая тетрадь', icon: 'notebook' as const, onClick: () => create('notebook', doc.id) },
-          { label: 'Новая папка', icon: 'folder' as const, onClick: () => create('folder', doc.id) },
-          { label: 'Импорт PDF', icon: 'pdf' as const, onClick: () => create('pdf', doc.id) },
-        ]
-      : []),
-    { label: 'Повторить карточки', icon: 'cards', onClick: () => navigate(`review?scope=${isFolder ? 'folder' : 'doc'}:${doc.id}`) },
+    ...(isFolder || doc.type === 'lecture' ? createItems(doc) : []),
+    { label: 'Повторить карточки', icon: 'cards', onClick: () => navigate(`review?scope=${isFolder || doc.type === 'lecture' ? 'folder' : 'doc'}:${doc.id}`) },
     {
       label: 'Переименовать',
       icon: 'edit',
@@ -72,22 +91,23 @@ function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: 
         if (t?.trim()) renameDoc(doc.id, t.trim());
       },
     },
-    ...(!isFolder && doc.type !== 'daily'
+    { label: 'Иконка и цвет…', icon: 'palette', onClick: () => pickIconAndColor(doc) },
+    ...(!isFolder && doc.type !== 'daily' && doc.type !== 'lecture'
       ? [{ label: doc.isTemplate ? 'Убрать из шаблонов' : 'Сделать шаблоном', icon: 'template' as const, onClick: () => setTemplate(doc.id, !doc.isTemplate) }]
       : []),
     { label: 'Переместить в…', icon: 'move', onClick: () => moveDialog(doc, docs) },
     { label: 'Выше', icon: 'arrowUp', onClick: () => shiftDoc(doc.id, -1) },
     { label: 'Ниже', icon: 'arrowDown', onClick: () => shiftDoc(doc.id, 1) },
     {
-      label: 'Удалить',
+      label: 'В корзину',
       icon: 'trash',
       danger: true,
       onClick: async () => {
         const n = collectSubtree(docs, doc.id).length - 1;
-        const msg = n > 0 ? `Вместе с ним удалится вложенных документов: ${n}. Карточки и история тоже удалятся.` : 'Карточки этого документа тоже удалятся.';
-        if (await dialog.confirm(`Удалить «${doc.title}»?`, 'Удалить', msg)) {
+        const msg = `${n > 0 ? `Вместе с ним — вложенных документов: ${n}. ` : ''}В корзине он пролежит 30 дней, оттуда его можно вернуть.`;
+        if (await dialog.confirm(`Удалить «${doc.title}» в корзину?`, 'Удалить', msg)) {
           if (activeId && collectSubtree(docs, doc.id).includes(activeId)) navigate('');
-          await deleteDoc(doc.id);
+          await trashDoc(doc.id);
         }
       },
     },
@@ -96,16 +116,19 @@ function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: 
   return (
     <div>
       <div
-        className={'tree-row' + (activeId === doc.id ? ' active' : '')}
+        className={'tree-row' + (active ? ' active' : '') + (doc.role ? ` role-${doc.role}` : '')}
         data-drop-doc={doc.id}
-        style={{ paddingLeft: 8 + depth * 16 }}
+        style={{ paddingLeft: 8 + depth * 16, color: doc.color || undefined }}
         onPointerDown={(e) => {
           if ((e.target as HTMLElement).closest('button')) return;
           beginDrag(e, {
             attr: 'data-drop-doc',
             id: doc.id,
             label: doc.title,
-            canNest: (tid) => docs.find((d) => d.id === tid)?.type === 'folder',
+            canNest: (tid) => {
+              const t = docs.find((d) => d.id === tid);
+              return !!t && isContainer(t);
+            },
             onDrop: (tid, pos) => moveDocTo(doc.id, tid, pos),
           });
         }}
@@ -118,7 +141,9 @@ function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: 
         }}
       >
         <span className="tree-chevron">{isFolder && <Icon name={doc.collapsed ? 'right' : 'down'} size={16} />}</span>
-        <Icon name={TYPE_ICON[doc.type]} size={18} />
+        <span className="tree-icon">
+          <Icon name={docIcon(doc)} size={18} />
+        </span>
         <span className="tree-title">{doc.title || 'Без названия'}</span>
         {doc.isTemplate && <span className="tree-badge">шаблон</span>}
         {dueN > 0 && (
@@ -135,7 +160,7 @@ function TreeNode({ doc, docs, depth, activeId, onNavigate }: { doc: Doc; docs: 
           ))}
           {kids.length === 0 && (
             <div className="tree-empty" style={{ paddingLeft: 40 + depth * 16 }}>
-              пусто
+              {doc.role === 'subject' ? 'добавьте тему в меню «⋯»' : doc.role === 'topic' ? 'добавьте лекцию в меню «⋯»' : 'пусто'}
             </div>
           )}
         </>
@@ -158,7 +183,8 @@ export function Sidebar({
   onCollapse: () => void;
 }) {
   const dueCount = due?.total ?? 0;
-  const docs = useLiveQuery(() => db.docs.toArray(), []);
+  const docs = useLiveQuery(() => db.docs.filter(isLive).toArray(), []);
+  const trashCount = useLiveQuery(() => db.docs.filter((d) => !!d.trashRoot).count(), []);
   const [q, setQ] = useState('');
   const roots = (docs ?? []).filter((d) => d.parentId === null).sort(sortDocs);
 
@@ -189,57 +215,56 @@ export function Sidebar({
         }}
       >
         <Icon name="search" size={18} />
-        <input type="search" placeholder="Поиск по заметкам" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
+        <input type="search" placeholder="Поиск по всему" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
       </form>
 
       <nav className="sidebar-nav">
         <button className={'nav-item' + (routeName === '' ? ' active' : '')} onClick={() => nav('')}>
-          <Icon name="home" /> Главная
-        </button>
-        <button
-          className="nav-item"
-          onClick={async () => {
-            const d = await getOrCreateDaily();
-            nav(`doc/${d.id}`);
-          }}
-        >
           <Icon name="today" /> Сегодня
         </button>
         <button className={'nav-item' + (routeName === 'review' ? ' active' : '')} onClick={() => nav('review')}>
           <Icon name="cards" /> Повторить
           {dueCount > 0 && <span className="badge">{dueCount}</span>}
         </button>
-        <button className={'nav-item' + (routeName === 'tags' || routeName === 'tag' ? ' active' : '')} onClick={() => nav('tags')}>
-          <Icon name="tag" /> Теги
-        </button>
-        <button className={'nav-item' + (routeName === 'settings' ? ' active' : '')} onClick={() => nav('settings')}>
-          <Icon name="settings" /> Настройки и копии
-        </button>
       </nav>
 
       <DueCtx.Provider value={due ? { byDoc: due.byDoc, newLeft: due.newLeft } : null}>
-      <div className="tree">
-        <div className="tree-label">Документы</div>
-        {roots.map((d) => (
-          <TreeNode key={d.id} doc={d} docs={docs!} depth={0} activeId={activeId} onNavigate={onNavigate} />
-        ))}
-        {docs && roots.length === 0 && <div className="tree-empty">Пока ничего нет</div>}
-      </div>
+        <div className="tree">
+          <div className="tree-label">Предметы и папки</div>
+          {roots.map((d) => (
+            <TreeNode key={d.id} doc={d} docs={docs!} depth={0} activeId={activeId} onNavigate={onNavigate} />
+          ))}
+          {docs && roots.length === 0 && <div className="tree-empty">Начните с предмета — кнопка внизу</div>}
+        </div>
       </DueCtx.Provider>
 
+      <nav className="sidebar-nav bottom">
+        <button className={'nav-item' + (routeName === 'trash' ? ' active' : '')} onClick={() => nav('trash')}>
+          <Icon name="trash2" /> Корзина
+          {(trashCount ?? 0) > 0 && <span className="badge muted-badge">{trashCount}</span>}
+        </button>
+        <button className={'nav-item' + (routeName === 'settings' ? ' active' : '')} onClick={() => nav('settings')}>
+          <Icon name="settings" /> Настройки
+        </button>
+      </nav>
+
       <div className="sidebar-foot">
-        <button className="btn ghost small" onClick={() => create('note', null)}>
-          <Icon name="note" size={18} /> Заметка
+        <button className="btn primary small grow" onClick={() => create('folder', null, 'subject')}>
+          <Icon name="plus" size={18} /> Предмет
         </button>
-        <button className="btn ghost small" onClick={() => create('notebook', null)}>
-          <Icon name="notebook" size={18} /> Тетрадь
-        </button>
-        <button className="btn ghost small" onClick={() => create('pdf', null)}>
-          <Icon name="pdf" size={18} /> PDF
-        </button>
-        <button className="btn ghost small" onClick={() => create('folder', null)}>
-          <Icon name="folder" size={18} /> Папка
-        </button>
+        <MenuButton
+          label="Создать…"
+          className="btn small"
+          items={[
+            { label: 'Заметка', icon: 'note', onClick: () => create('note', null) },
+            { label: 'Тетрадь', icon: 'notebook', onClick: () => create('notebook', null) },
+            { label: 'Импорт PDF', icon: 'pdf', onClick: () => create('pdf', null) },
+            { label: 'Лекция', icon: 'lecture', onClick: () => create('lecture', null) },
+            { label: 'Папка', icon: 'folder', onClick: () => create('folder', null) },
+          ]}
+        >
+          <Icon name="more" size={18} /> Ещё
+        </MenuButton>
       </div>
     </aside>
   );

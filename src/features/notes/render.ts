@@ -73,7 +73,8 @@ export function renderText(text: string, opts: RenderOptions = {}): string {
         parts.push(`<a class="wikilink" data-link="${escapeHtml(seg.v)}">${escapeHtml(seg.v)}</a>`);
         break;
       case 'tag':
-        parts.push(`<a class="tag" data-tag="${escapeHtml(seg.v)}">#${escapeHtml(seg.v)}</a>`);
+        // теги в SPEC.md не нужны — показываем как обычный текст
+        parts.push(renderInline('#' + seg.v));
         break;
       case 'sep':
         if (seg.v === '::') conceptUntil = parts.length;

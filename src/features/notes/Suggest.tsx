@@ -61,7 +61,7 @@ export function useSuggestions(trig: Trigger | null, block: Block, ops: Ops): Su
   const kind = trig?.kind;
   const q = trig?.query ?? '';
 
-  const docs = useLiveQuery(() => (kind === 'link' ? db.docs.filter((d) => d.type !== 'folder').toArray() : []), [kind]);
+  const docs = useLiveQuery(() => (kind === 'link' ? db.docs.filter((d) => d.type !== 'folder' && !d.deletedAt).toArray() : []), [kind]);
   const tags = useLiveQuery(async () => (kind === 'tag' ? ((await db.blocks.orderBy('tags').uniqueKeys()) as string[]) : []), [kind]);
   const blocks = useLiveQuery(async () => {
     if (kind !== 'portal' || q.trim().length < 2) return [];

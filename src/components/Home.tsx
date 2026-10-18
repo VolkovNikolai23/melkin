@@ -1,15 +1,19 @@
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useEffect, useState } from 'react';
 import { db } from '../db/db';
 import { BACKUP_REMIND_DAYS, getLastBackup } from '../db/backup';
-import { createDoc, DOC_LABEL } from '../features/notes/docs';
+import type { Doc } from '../db/schema';
 import { getOrCreateDaily } from '../features/notes/daily';
-import { pickFiles } from '../features/notes/images';
-import { importPdf } from '../features/pdf/annotations';
+import { docIcon } from '../features/notes/docIcons';
+import { collectSubtree } from '../features/notes/docs';
+import { Outliner } from '../features/notes/Outliner';
+import { streakDays } from '../features/review/stats';
+import { badgeCount, sumDue } from '../features/review/scheduler';
 import { navigate } from '../lib/router';
-import { TYPE_ICON } from '../features/notes/docIcons';
 import { plural } from '../lib/time';
 import { Icon } from './Icon';
 import { useDueCount } from './useDue';
+import { StorageWarning } from './storage';
 
 export function BackupReminder() {
   const info = useLiveQuery(async () => ({ last: await getLastBackup(), docs: await db.docs.count() }), []);
@@ -27,97 +31,111 @@ export function BackupReminder() {
   );
 }
 
-export function Home() {
-  const due = useDueCount();
-  const recent = useLiveQuery(() => db.docs.orderBy('updatedAt').reverse().filter((d) => d.type !== 'folder').limit(8).toArray(), []);
+function StreakCard() {
+  const s = useLiveQuery(async () => streakDays((await db.reviewLogs.toArray()).map((l) => l.review), Date.now()), []);
+  if (!s) return null;
+  return (
+    <section className={'widget streak' + (s.today ? ' lit' : '')}>
+      <div className="streak-flame">
+        <Icon name="flame" size={30} />
+      </div>
+      <div>
+        <div className="widget-num">
+          {s.days} {plural(s.days, 'день', 'дня', 'дней')}
+        </div>
+        <div className="muted small">
+          {s.days === 0 ? 'Повторите хоть одну карточку — и стрик начнётся' : s.today ? 'Сегодня уже занимались — так держать!' : 'Повторите сегодня, чтобы не прервать стрик'}
+        </div>
+      </div>
+    </section>
+  );
+}
 
-  const create = async (type: 'note' | 'notebook') => navigate(`doc/${(await createDoc(type, null)).id}`);
+function DueCard() {
+  const due = useDueCount();
+  const docs = useLiveQuery(() => db.docs.filter((d) => !d.deletedAt).toArray(), []);
+  if (!due || !docs) return null;
+  // где больше всего карточек к повторению: лекции и самостоятельные документы
+  const top = docs
+    .filter((d) => d.type === 'lecture' || (d.type !== 'folder' && !docs.some((p) => p.id === d.parentId && p.type === 'lecture')))
+    .map((d) => ({ d, n: badgeCount(sumDue(due.byDoc, collectSubtree(docs, d.id)), due.newLeft) }))
+    .filter((x) => x.n > 0)
+    .sort((a, b) => b.n - a.n)
+    .slice(0, 4);
+  return (
+    <section className="widget">
+      <h3 className="widget-title">
+        <Icon name="cards" size={18} /> Что повторить
+      </h3>
+      <div className="widget-num">
+        {due.total} <span className="widget-unit">{plural(due.total, 'карточка', 'карточки', 'карточек')}</span>
+      </div>
+      {top.map(({ d, n }) => (
+        <button key={d.id} className="widget-row" onClick={() => navigate(`review?scope=${d.type === 'lecture' ? 'folder' : 'doc'}:${d.id}`)}>
+          <Icon name={docIcon(d)} size={16} />
+          <span>{d.title}</span>
+          <span className="tree-due">{n}</span>
+        </button>
+      ))}
+      <button className="btn primary grow" disabled={!due.total} onClick={() => navigate('review?scope=all')}>
+        Повторить всё
+      </button>
+    </section>
+  );
+}
+
+function RecentLectures() {
+  const recent = useLiveQuery(async () => {
+    const docs = await db.docs.filter((d) => !d.deletedAt).toArray();
+    const lectures = docs.filter((d) => d.type === 'lecture');
+    const activity = (l: Doc) => Math.max(...collectSubtree(docs, l.id).map((id) => docs.find((d) => d.id === id)?.updatedAt ?? 0));
+    const parentTitle = (l: Doc) => docs.find((d) => d.id === l.parentId)?.title ?? '';
+    return lectures
+      .map((l) => ({ l, at: activity(l), parent: parentTitle(l) }))
+      .sort((a, b) => b.at - a.at)
+      .slice(0, 6);
+  }, []);
+  return (
+    <section className="widget">
+      <h3 className="widget-title">
+        <Icon name="lecture" size={18} /> Последние лекции
+      </h3>
+      {recent && recent.length === 0 && <p className="muted small">Создайте предмет, в нём тему и лекцию — меню «⋯» в боковой панели.</p>}
+      {recent?.map(({ l, parent }) => (
+        <button key={l.id} className="widget-row" onClick={() => navigate(`doc/${l.id}`)} style={{ color: l.color || undefined }}>
+          <Icon name={docIcon(l)} size={16} />
+          <span>{l.title}</span>
+          <small className="muted">{parent}</small>
+        </button>
+      ))}
+    </section>
+  );
+}
+
+/** Главный экран «Сегодня»: заметка дня + стрик, что повторить, последние лекции. */
+export function Home() {
+  const [daily, setDaily] = useState<Doc | null>(null);
+  useEffect(() => {
+    getOrCreateDaily().then(setDaily);
+  }, []);
+  const title = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <div className="page-pad home">
-      <BackupReminder />
-      <section className="due-card">
-        <div>
-          <div className="due-num">{due?.total ?? '…'}</div>
-          <div className="due-label">
-            {due ? plural(due.total, 'карточка', 'карточки', 'карточек') : ''} к повторению
-            {due && due.total > 0 && (
-              <span className="muted">
-                {' '}
-                · повторить {due.due}, новых {due.fresh}
-              </span>
-            )}
-          </div>
-        </div>
-        <button className="btn primary big" disabled={!due?.total} onClick={() => navigate('review?scope=all')}>
-          <Icon name="cards" /> Повторить
-        </button>
-      </section>
-
-      <section>
-        <h2 className="section-title">Недавние</h2>
-        <div className="doc-list">
-          {recent?.map((d) => (
-            <button key={d.id} className="doc-card" onClick={() => navigate(`doc/${d.id}`)}>
-              <Icon name={TYPE_ICON[d.type]} />
-              <span>{d.title}</span>
-              <small>{DOC_LABEL[d.type]}</small>
-            </button>
-          ))}
-          <button className="doc-card new" onClick={async () => navigate(`doc/${(await getOrCreateDaily()).id}`)}>
-            <Icon name="today" />
-            <span>Сегодня</span>
-          </button>
-          <button className="doc-card new" onClick={() => create('note')}>
-            <Icon name="plus" />
-            <span>Новая заметка</span>
-          </button>
-          <button
-            className="doc-card new"
-            onClick={async () => {
-              const [f] = await pickFiles('application/pdf,.pdf', false);
-              if (f) navigate(`doc/${(await importPdf(f, null)).id}`);
-            }}
-          >
-            <Icon name="pdf" />
-            <span>Импорт PDF</span>
-          </button>
-          <button className="doc-card new" onClick={() => create('notebook')}>
-            <Icon name="plus" />
-            <span>Новая тетрадь</span>
-          </button>
-        </div>
-      </section>
-
-      <section className="cheatsheet">
-        <h2 className="section-title">Шпаргалка</h2>
-        <dl>
-          <dt>вопрос &gt;&gt; ответ</dt>
-          <dd>карточка вперёд (&lt;&lt; — обратная, &lt;&gt; — в обе стороны)</dd>
-          <dt>понятие :: определение</dt>
-          <dd>понятие: карточки в обе стороны</dd>
-          <dt>свойство ;; значение</dt>
-          <dd>описание понятия-родителя: «Понятие → свойство?»</dd>
-          <dt>вопрос &gt;&gt;&gt; · &gt;&gt;1. · &gt;&gt;A)</dt>
-          <dd>ответ — вложенные блоки · список по пунктам · выбор ответа (первый — верный)</dd>
-          <dt>{'{{скрыто}} · {{c1::…}}'}</dt>
-          <dd>клоз; c1, c2 объединяют клозы в одну карточку</dd>
-          <dt>$x^2$ · $$\int f$$</dt>
-          <dd>формулы KaTeX</dd>
-          <dt>**жирный** *курсив* __подчёркнутый__ ==выделение==</dt>
-          <dd>форматирование (или ⌘B / ⌘I / ⌘U и панель внизу)</dd>
-          <dt># / ## / ### · 1.</dt>
-          <dd>заголовки H1–H3 · нумерованный пункт</dd>
-          <dt>#тег · [[Документ]] · ((блок</dt>
-          <dd>тег · ссылка на документ (с обратными ссылками) · портал — живая копия блока</dd>
-          <dt>/</dt>
-          <dd>меню вставки: картинка, код, рисунок, портал, шаблон, свойства, заголовки…</dd>
-          <dt>```python</dt>
-          <dd>блок кода с подсветкой</dd>
-          <dt>Enter · Shift+Enter · Tab · Shift+Tab</dt>
-          <dd>новый блок · перенос строки · вложить · вынести. Удерживайте маркер блока, чтобы перетащить</dd>
-        </dl>
-      </section>
+    <div className="today">
+      <div className="today-main">
+        <header className="today-head">
+          <div className="muted today-date">{title}</div>
+          <h1>Сегодня</h1>
+        </header>
+        <StorageWarning />
+        <BackupReminder />
+        {daily && <Outliner docId={daily.id} highlight={null} />}
+      </div>
+      <aside className="today-side">
+        <StreakCard />
+        <DueCard />
+        <RecentLectures />
+      </aside>
     </div>
   );
 }

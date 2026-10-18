@@ -42,7 +42,7 @@ export async function insertTemplate(templateDocId: string, targetDocId: string,
 }
 
 export function listTemplates() {
-  return db.docs.filter((d) => !!d.isTemplate).toArray();
+  return db.docs.filter((d) => !!d.isTemplate && !d.deletedAt).toArray();
 }
 
 /** Отметить документ как шаблон (его карточки отключаются) или снять отметку. */

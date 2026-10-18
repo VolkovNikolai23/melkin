@@ -14,14 +14,16 @@ import { backlinksQuery } from './links';
 function useDocTitles(blocks: Block[] | undefined) {
   return useLiveQuery(async () => {
     const ids = [...new Set((blocks ?? []).map((b) => b.docId))];
-    return new Map((await db.docs.bulkGet(ids)).filter(Boolean).map((d) => [d!.id, d!.title]));
+    return new Map((await db.docs.bulkGet(ids)).filter((d) => d && !d.deletedAt).map((d) => [d!.id, d!.title]));
   }, [blocks]);
 }
 
 /** Обратные ссылки: блоки из других мест, которые ссылаются на документ. */
 export function Backlinks({ docId }: { docId: string }) {
-  const blocks = useLiveQuery(() => backlinksQuery(docId), [docId]);
-  const titles = useDocTitles(blocks);
+  const all = useLiveQuery(() => backlinksQuery(docId), [docId]);
+  const titles = useDocTitles(all);
+  // ссылки из документов, лежащих в корзине, не показываем
+  const blocks = all && titles ? all.filter((b) => titles.has(b.docId)) : undefined;
   if (!blocks?.length) return null;
   return (
     <section className="backlinks">

@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../db/db';
-import { deleteDoc } from '../notes/docs';
+import { purgeDoc } from '../notes/docs';
 import { addHighlight, createTargetNote, getTargetNote, highlightToBlock, importPdf, pageAnnotations, saveInk } from './annotations';
 
 beforeEach(async () => {
@@ -45,7 +45,7 @@ describe('PDF: импорт, аннотации, выделения → блок
   it('удаление PDF удаляет аннотации и файл', async () => {
     const d = await importPdf(pdfFile(), null);
     await addHighlight(d.id, 1, [], 'x', 'yellow');
-    await deleteDoc(d.id);
+    await purgeDoc(d.id);
     expect(await db.annotations.count()).toBe(0);
     expect(await db.files.count()).toBe(0);
   });

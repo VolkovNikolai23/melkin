@@ -30,7 +30,17 @@ export function descendantDocIds(docs: Doc[], folderId: string): Set<string> {
   return res;
 }
 
+/** Карточки документов из корзины в повторение не попадают. */
+async function dropTrashed(cards: CardRow[]): Promise<CardRow[]> {
+  const trashed = new Set((await db.docs.where('deletedAt').above(0).primaryKeys()) as string[]);
+  return trashed.size ? cards.filter((c) => !trashed.has(c.docId)) : cards;
+}
+
 export async function cardsInScope(scope: Scope): Promise<CardRow[]> {
+  return dropTrashed(await cardsInScopeRaw(scope));
+}
+
+async function cardsInScopeRaw(scope: Scope): Promise<CardRow[]> {
   if (scope.kind === 'doc') return db.cards.where('docId').equals(scope.id).toArray();
   if (scope.kind === 'tag') {
     const ids = await db.blocks.where('tags').equals(scope.id.toLowerCase()).primaryKeys();

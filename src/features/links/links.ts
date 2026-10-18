@@ -32,14 +32,14 @@ export function renameLinkInText(text: string, oldTitle: string, newTitle: strin
 
 export async function linksFor(text: string): Promise<string[]> {
   if (!text.includes('[[')) return [];
-  return resolveLinks(text, await db.docs.toArray());
+  return resolveLinks(text, await db.docs.filter((d) => !d.deletedAt).toArray());
 }
 
 /** Документ появился или получил новое название — привязываем к нему ссылки, которые раньше «висели». */
 export async function relinkTitle(title: string) {
   const needle = '[[' ;
   const t = normTitle(title);
-  const docs = await db.docs.toArray();
+  const docs = await db.docs.filter((d) => !d.deletedAt).toArray();
   const blocks = await db.blocks.filter((b) => b.text.includes(needle) && normTitle(b.text).includes(t)).toArray();
   for (const b of blocks) {
     const links = resolveLinks(b.text, docs);

@@ -40,6 +40,27 @@ describe('миграция IndexedDB v1 → v2', () => {
   });
 });
 
+describe('миграция IndexedDB v2 → v3', () => {
+  it('данные v2 открываются в v3 без изменений, появляются новые таблицы', async () => {
+    const name = 'migr-v3';
+    const v2 = new Dexie(name);
+    v2.version(2).stores({
+      docs: 'id, parentId, type, updatedAt, dailyDate', blocks: 'id, docId, parentId, updatedAt, *tags, *links, portalOf',
+      pages: 'id, docId', files: 'id, kind', annotations: 'id, docId, [docId+page], blockId',
+      cards: 'id, blockId, docId, due, state', reviewLogs: 'id, cardId, review', meta: 'key',
+    });
+    await v2.table('docs').add({ id: 'd', parentId: null, type: 'note', title: 'Старая', order: 0, createdAt: now, updatedAt: now });
+    await v2.table('cards').add({ id: 'c', blockId: 'b', docId: 'd', kind: 'forward', front: 'q', back: 'a', reps: 3, state: 2, due: now });
+    v2.close();
+    const v3 = new MelkinDB(name);
+    expect((await v3.docs.get('d'))!.title).toBe('Старая');
+    expect((await v3.cards.get('c'))!.reps).toBe(3);
+    expect(await v3.tests.count()).toBe(0);
+    expect(await v3.docs.where('deletedAt').above(0).count()).toBe(0);
+    v3.close();
+  });
+});
+
 describe('резервная копия .zip', () => {
   it('экспорт → импорт с заменой возвращает те же данные, включая файлы', async () => {
     await db.docs.add({ id: 'd1', parentId: null, type: 'note', title: 'Матан', order: 0, createdAt: now, updatedAt: now });
@@ -76,6 +97,15 @@ describe('резервная копия .zip', () => {
     });
     const b = await readBackup(new Blob([json]));
     expect((b.data.blocks![0] as { text: string }).text).toBe('a >> b');
+  });
+
+  it('ключи ИИ не попадают в копию и не стираются при восстановлении', async () => {
+    await db.meta.put({ key: 'aiKeys', value: { gemini: 'секрет' } });
+    const file = await makeBackupFile();
+    const b = await readBackup(file);
+    expect((b.data.meta as { key: string }[]).some((m) => m.key === 'aiKeys')).toBe(false);
+    await importBackup(b, 'replace');
+    expect((await db.meta.get('aiKeys'))?.value).toEqual({ gemini: 'секрет' });
   });
 
   it('чужой файл отклоняется', async () => {

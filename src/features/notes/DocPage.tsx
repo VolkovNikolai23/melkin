@@ -5,14 +5,16 @@ import { db } from '../../db/db';
 import type { Doc } from '../../db/schema';
 import { navigate } from '../../lib/router';
 import { NotebookView } from '../ink/NotebookView';
-import { createDoc, DOC_LABEL, renameDoc, sortDocs } from './docs';
+import { dialog } from '../../components/dialog';
+import { openSplit } from '../../lib/splitStore';
+import { Backlinks } from '../links/LinkViews';
+import { docIcon } from './docIcons';
+import { createDoc, createFolder, docLabel, renameDoc, restoreDoc, sortDocs } from './docs';
+import { LecturePage, useKnowledge } from './LecturePage';
 import { Outliner } from './Outliner';
 
 // pdf.js подгружается только при открытии PDF
 const PdfView = lazy(() => import('../pdf/PdfView'));
-import { Backlinks, TagTable } from '../links/LinkViews';
-import { normalizeTag } from '../../lib/markup';
-import { TYPE_ICON } from './docIcons';
 
 function TitleInput({ doc }: { doc: Doc }) {
   const [title, setTitle] = useState(doc.title);
@@ -49,8 +51,8 @@ function Breadcrumbs({ doc }: { doc: Doc }) {
   return (
     <div className="breadcrumbs">
       {chain.map((c) => (
-        <button key={c.id} onClick={() => navigate(`doc/${c.id}`)}>
-          {c.title} /
+        <button key={c.id} onClick={() => navigate(`doc/${c.id}`)} style={{ color: c.color || undefined }}>
+          <Icon name={docIcon(c)} size={14} /> {c.title} /
         </button>
       ))}
     </div>
@@ -58,66 +60,110 @@ function Breadcrumbs({ doc }: { doc: Doc }) {
 }
 
 function FolderView({ doc }: { doc: Doc }) {
-  const kids = useLiveQuery(() => db.docs.where('parentId').equals(doc.id).toArray(), [doc.id]);
-  const add = async (type: 'note' | 'notebook') => navigate(`doc/${(await createDoc(type, doc.id)).id}`);
+  const kids = useLiveQuery(() => db.docs.where('parentId').equals(doc.id).filter((d) => !d.deletedAt).toArray(), [doc.id]);
+  const knowledge = useKnowledge(doc.id);
+  const add = async (type: 'note' | 'notebook' | 'lecture' | 'topic') => {
+    if (type === 'topic') {
+      const t = await dialog.prompt('Название темы', '');
+      if (t !== null) await createFolder('topic', doc.id, t.trim() || undefined);
+      return;
+    }
+    let title: string | undefined;
+    if (type === 'lecture') {
+      const t = await dialog.prompt('Название лекции', '');
+      if (t === null) return;
+      title = t.trim() || undefined;
+    }
+    navigate(`doc/${(await createDoc(type, doc.id, title)).id}`);
+  };
   return (
     <div className="folder-view">
+      {knowledge && knowledge.total > 0 && (
+        <p className="muted">
+          Знание {doc.role === 'subject' ? 'предмета' : doc.role === 'topic' ? 'темы' : 'папки'}: <strong>{knowledge.percent}%</strong> · выучено {knowledge.known} из {knowledge.total}
+        </p>
+      )}
       <div className="doc-list">
         {(kids ?? []).sort(sortDocs).map((d) => (
-          <button key={d.id} className="doc-card" onClick={() => navigate(`doc/${d.id}`)}>
-            <Icon name={TYPE_ICON[d.type]} />
+          <button key={d.id} className="doc-card" onClick={() => navigate(`doc/${d.id}`)} style={{ color: d.color || undefined }}>
+            <Icon name={docIcon(d)} />
             <span>{d.title}</span>
-            <small>{DOC_LABEL[d.type]}</small>
+            <small>{docLabel(d)}</small>
           </button>
         ))}
       </div>
       <div className="row-gap">
+        {doc.role === 'subject' && (
+          <button className="btn primary" onClick={() => add('topic')}>
+            <Icon name="folderPlus" /> Новая тема
+          </button>
+        )}
+        {(doc.role === 'subject' || doc.role === 'topic') && (
+          <button className={'btn' + (doc.role === 'topic' ? ' primary' : '')} onClick={() => add('lecture')}>
+            <Icon name="lecture" /> Новая лекция
+          </button>
+        )}
         <button className="btn" onClick={() => add('note')}>
-          <Icon name="note" /> Новая заметка
+          <Icon name="note" /> Заметка
         </button>
         <button className="btn" onClick={() => add('notebook')}>
-          <Icon name="notebook" /> Новая тетрадь
+          <Icon name="notebook" /> Тетрадь
         </button>
       </div>
     </div>
   );
 }
 
-export function DocPage({ id, highlight, page, ann }: { id: string; highlight: string | null; page?: number | null; ann?: string | null }) {
+const FULL_HEIGHT = new Set(['notebook', 'pdf', 'lecture']);
+
+export function DocPage({ id, highlight, page, ann, inSplit }: { id: string; highlight: string | null; page?: number | null; ann?: string | null; inSplit?: boolean }) {
   // null — документа нет (удалён); undefined — ещё загружается
   const doc = useLiveQuery(() => db.docs.get(id).then((d) => d ?? null), [id]);
   const cardsDue = useLiveQuery(() => db.cards.where('docId').equals(id).count(), [id]);
   if (doc === undefined) return <div className="page-pad muted">Загрузка…</div>;
   if (doc === null) return <div className="page-pad muted">Документ не найден.</div>;
 
+  const reviewScope = doc.type === 'folder' || doc.type === 'lecture' ? 'folder' : 'doc';
   return (
-    <div className={'doc-page' + (doc.type === 'notebook' || doc.type === 'pdf' ? ' is-notebook' : '')}>
+    <div className={'doc-page' + (FULL_HEIGHT.has(doc.type) ? ' is-notebook' : '')}>
       <header className="doc-head">
         <Breadcrumbs doc={doc} />
         <div className="doc-head-row">
+          <span className="doc-head-icon" style={{ color: doc.color || undefined }}>
+            <Icon name={docIcon(doc)} size={24} />
+          </span>
           <TitleInput doc={doc} />
-          {doc.type !== 'notebook' && (cardsDue ?? 0) > 0 && (
-            <button className="btn small" onClick={() => navigate(`review?scope=${doc.type === 'folder' ? 'folder' : 'doc'}:${doc.id}`)}>
+          {(doc.type === 'folder' || doc.type === 'lecture' || (cardsDue ?? 0) > 0) && doc.type !== 'notebook' && (
+            <button className="btn small" onClick={() => navigate(`review?scope=${reviewScope}:${doc.id}`)}>
               <Icon name="cards" size={18} /> Повторить
             </button>
           )}
-          {doc.type === 'folder' && (
-            <button className="btn small" onClick={() => navigate(`review?scope=folder:${doc.id}`)}>
-              <Icon name="cards" size={18} /> Повторить папку
+          {!inSplit && (
+            <button className="icon-btn" title="Открыть рядом (разделить экран)" aria-label="Открыть рядом" onClick={() => openSplit(doc.id)}>
+              <Icon name="split" />
             </button>
           )}
         </div>
       </header>
+      {doc.deletedAt && (
+        <div className="banner warn">
+          <Icon name="trash2" />
+          <span>Этот документ в корзине.</span>
+          <button className="btn small" onClick={() => restoreDoc(doc.id)}>
+            <Icon name="restore" size={18} /> Вернуть
+          </button>
+        </div>
+      )}
       {(doc.type === 'note' || doc.type === 'daily') && <Outliner docId={doc.id} highlight={highlight} />}
       {doc.isTemplate && <p className="muted small template-note">Это шаблон: вставляется в другие документы командой /шаблон. Карточки шаблона не повторяются.</p>}
-      {doc.type !== 'folder' && !/\s/.test(doc.title.trim()) && <TagTable tag={normalizeTag(doc.title)} title={`Блоки с тегом #${normalizeTag(doc.title)}`} />}
-      {doc.type !== 'folder' && <Backlinks docId={doc.id} />}
+      {(doc.type === 'note' || doc.type === 'daily') && <Backlinks docId={doc.id} />}
       {doc.type === 'notebook' && <NotebookView doc={doc} />}
       {doc.type === 'pdf' && (
         <Suspense fallback={<div className="page-pad muted">Открываю PDF…</div>}>
           <PdfView doc={doc} initialPage={page ?? null} flashId={ann ?? null} />
         </Suspense>
       )}
+      {doc.type === 'lecture' && <LecturePage lecture={doc} />}
       {doc.type === 'folder' && <FolderView doc={doc} />}
     </div>
   );

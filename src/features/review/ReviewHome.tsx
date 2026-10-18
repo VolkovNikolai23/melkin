@@ -12,10 +12,11 @@ import { badgeCount, formatInterval, isNew, sumDue } from './scheduler';
 /** «Повторить»: все карточки или очередь по папке, документу, тегу. */
 export function ReviewHome() {
   const due = useDueCount();
-  const docs = useLiveQuery(() => db.docs.toArray(), []);
+  const docs = useLiveQuery(() => db.docs.filter((d) => !d.deletedAt).toArray(), []);
   const extra = useLiveQuery(async () => {
     const now = Date.now();
-    const cards = await db.cards.filter((c) => !c.disabled).toArray();
+    const trashed = new Set((await db.docs.where('deletedAt').above(0).primaryKeys()) as string[]);
+    const cards = await db.cards.filter((c) => !c.disabled && !trashed.has(c.docId)).toArray();
     // ближайшее повторение, если сейчас ничего нет
     const next = cards.filter((c) => !isNew(c) && c.due > now).reduce((m, c) => Math.min(m, c.due), Infinity);
     // счётчики по тегам

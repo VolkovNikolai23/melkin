@@ -32,7 +32,7 @@ const RenderedText = memo(function RenderedText({ text }: { text: string }) {
 /** Переход по [[ссылке]]: открываем документ с таким названием или создаём новый. */
 export async function openLink(title: string) {
   const t = title.trim().toLowerCase();
-  const doc = await db.docs.filter((d) => d.type !== 'folder' && d.title.trim().toLowerCase() === t).first();
+  const doc = await db.docs.filter((d) => d.type !== 'folder' && !d.deletedAt && d.title.trim().toLowerCase() === t).first();
   navigate(`doc/${(doc ?? (await createDoc('note', null, title.trim()))).id}`);
 }
 

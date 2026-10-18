@@ -2,7 +2,10 @@
 // заложены сразу, чтобы дальше не переделывать таблицы. Необязательные поля
 // появляются у записей по мере того, как соответствующие функции начинают ими пользоваться.
 
-export type DocType = 'folder' | 'note' | 'notebook' | 'pdf' | 'daily';
+export type DocType = 'folder' | 'note' | 'notebook' | 'pdf' | 'daily' | 'lecture';
+
+/** Роль папки в структуре учёбы: Предмет → Тема → Лекция */
+export type FolderRole = 'subject' | 'topic';
 
 export interface Doc {
   id: string;
@@ -18,6 +21,17 @@ export interface Doc {
   isTemplate?: boolean;
   /** Для PDF-документа — ссылка на файл в таблице files */
   fileId?: string;
+  /** Для папки: предмет или тема */
+  role?: FolderRole;
+  /** Иконка из набора и её цвет (для папок, предметов, тем, лекций) */
+  icon?: string;
+  color?: string;
+  /** Лекция: её конспект (тетрадка) и презентация (PDF) */
+  lecture?: { notebookId?: string; slidesId?: string };
+  /** Корзина: когда удалён (через 30 дней удаляется насовсем) */
+  deletedAt?: number;
+  /** Корень удаления — именно его показываем в корзине и восстанавливаем вместе с вложенными */
+  trashRoot?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -100,6 +114,8 @@ export interface Block {
   pdfRef?: PdfRef;
   /** Карточки блока временно отключены (текст и история сохраняются) */
   cardsOff?: boolean;
+  /** Распознанный текст рукописного блока (для офлайн-поиска и ИИ) */
+  recognizedText?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -125,6 +141,8 @@ export interface Page {
   order: number;
   background: PageBackground;
   strokes: Stroke[];
+  /** Распознанный текст страницы (для офлайн-поиска и ИИ) */
+  recognizedText?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -191,13 +209,50 @@ export interface ReviewLogRow {
   learning_steps: number;
 }
 
+export type TestQuestionKind = 'single' | 'multiple' | 'truefalse' | 'open' | 'match' | 'label' | 'order';
+
+/** Тест по подтеме или всей теме (наполняется на этапе 6). */
+export interface TestRow {
+  id: string;
+  /** Документ (лекция или тема), к которому относится тест */
+  docId: string;
+  title: string;
+  questions: { id: string; kind: TestQuestionKind; prompt: string; data: unknown }[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface TestAttempt {
+  id: string;
+  testId: string;
+  docId: string;
+  at: number;
+  score: number;
+  answers: { questionId: string; correct: boolean; answer: unknown }[];
+}
+
 export interface MetaRow {
   key: string;
   value: unknown;
 }
 
+export type ThemeSetting = 'system' | 'light' | 'dark';
+export type FontSetting = 'nunito' | 'system' | 'ptsans' | 'caveat';
+export type AiProviderId = 'gemini' | 'claude';
+
 export interface Settings {
   newPerDay: number;
+  theme: ThemeSetting;
+  font: FontSetting;
+  /** Провайдер ИИ и модель; ключи хранятся отдельно (meta 'aiKeys') и не попадают в копию */
+  aiProvider: AiProviderId;
+  aiModel: { gemini: string; claude: string };
 }
 
-export const DEFAULT_SETTINGS: Settings = { newPerDay: 20 };
+export const DEFAULT_SETTINGS: Settings = {
+  newPerDay: 20,
+  theme: 'system',
+  font: 'nunito',
+  aiProvider: 'gemini',
+  aiModel: { gemini: 'gemini-flash-latest', claude: 'claude-opus-5-5' },
+};

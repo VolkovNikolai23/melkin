@@ -1,16 +1,111 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useRef, useState } from 'react';
-import { db, getSettings, saveSettings } from '../db/db';
+import { AI_KEYS_META, db, getMeta, getSettings, saveSettings, setMeta } from '../db/db';
+import type { AiProviderId, FontSetting, ThemeSetting } from '../db/schema';
+import { FONTS, THEMES } from '../lib/appearance';
+import { formatBytes, storageLevel } from './storage';
 import { deliverFile, getLastBackup, importBackup, makeBackupFile, markBackupDone, readBackup } from '../db/backup';
 import { formatDate } from '../lib/time';
 import { dialog } from './dialog';
 import { Icon } from './Icon';
 
-function formatBytes(n: number) {
-  if (n < 1024) return `${n} Б`;
-  if (n < 1024 ** 2) return `${(n / 1024).toFixed(0)} КБ`;
-  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1).replace('.', ',')} МБ`;
-  return `${(n / 1024 ** 3).toFixed(1).replace('.', ',')} ГБ`;
+const PROVIDERS: { id: AiProviderId; label: string; hint: string; keyUrl: string }[] = [
+  { id: 'gemini', label: 'Google Gemini (бесплатно)', hint: 'Ключ: aistudio.google.com → Get API key. Бесплатный уровень с лимитами; из России нужен VPN.', keyUrl: 'https://aistudio.google.com/apikey' },
+  { id: 'claude', label: 'Claude (Anthropic)', hint: 'Ключ: console.anthropic.com → API Keys. Платно по факту использования.', keyUrl: 'https://console.anthropic.com/settings/keys' },
+];
+
+type Keys = Partial<Record<AiProviderId, string>>;
+
+/** Ключи ИИ: хранятся только на этом устройстве и не попадают в резервную копию. */
+function AiSettings() {
+  const settings = useLiveQuery(getSettings, []);
+  const keys = useLiveQuery(() => getMeta<Keys>(AI_KEYS_META, {}), []);
+  const [shown, setShown] = useState(false);
+  if (!settings || !keys) return null;
+  const p = PROVIDERS.find((x) => x.id === settings.aiProvider) ?? PROVIDERS[0];
+  const setKey = (v: string) => setMeta(AI_KEYS_META, { ...keys, [p.id]: v.trim() || undefined });
+  return (
+    <section className="panel">
+      <h2>
+        <Icon name="sparkle" size={20} /> Искусственный интеллект
+      </h2>
+      <label className="field">
+        <span>Провайдер</span>
+        <select className="text-input narrow-select" value={settings.aiProvider} onChange={(e) => saveSettings({ aiProvider: e.target.value as AiProviderId })}>
+          {PROVIDERS.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field stacked">
+        <span>Ключ API</span>
+        <div className="key-row">
+          <input
+            key={p.id}
+            className="text-input"
+            type={shown ? 'text' : 'password'}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Вставьте ключ"
+            defaultValue={keys[p.id] ?? ''}
+            onBlur={(e) => setKey(e.target.value)}
+          />
+          <button className="btn small" type="button" onClick={() => setShown(!shown)}>
+            {shown ? 'Скрыть' : 'Показать'}
+          </button>
+        </div>
+      </label>
+      <p className="muted small">
+        {p.hint} Ключ хранится только на этом устройстве и не попадает в резервную копию.{' '}
+        <a href={p.keyUrl} target="_blank" rel="noreferrer">
+          Где взять ключ
+        </a>
+      </p>
+      <label className="field">
+        <span>Модель</span>
+        <input
+          key={'m' + p.id}
+          className="text-input narrow-select"
+          defaultValue={settings.aiModel[p.id]}
+          spellCheck={false}
+          onBlur={(e) => e.target.value.trim() && saveSettings({ aiModel: { ...settings.aiModel, [p.id]: e.target.value.trim() } })}
+        />
+      </label>
+      <p className="muted small">{keys[p.id] ? '✓ Ключ сохранён. Функции ИИ появятся на следующих этапах.' : 'Ключ не задан — функции ИИ будут недоступны.'}</p>
+    </section>
+  );
+}
+
+function AppearanceSettings() {
+  const settings = useLiveQuery(getSettings, []);
+  if (!settings) return null;
+  return (
+    <section className="panel">
+      <h2>
+        <Icon name="palette" size={20} /> Оформление
+      </h2>
+      <div className="field">
+        <span>Тема</span>
+        <div className="segmented">
+          {THEMES.map((t) => (
+            <button key={t.id} className={settings.theme === t.id ? 'active' : ''} onClick={() => saveSettings({ theme: t.id as ThemeSetting })}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="font-list">
+        {FONTS.map((f) => (
+          <button key={f.id} className={'font-choice' + (settings.font === f.id ? ' active' : '')} style={{ fontFamily: f.css }} onClick={() => saveSettings({ font: f.id as FontSetting })}>
+            <span className="font-sample">Аа Бб 123</span>
+            <span className="font-label">{f.label}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 export function SettingsView() {
@@ -69,7 +164,10 @@ export function SettingsView() {
 
   return (
     <div className="page-pad settings">
-      <h1>Настройки и копии</h1>
+      <h1>Настройки</h1>
+
+      <AppearanceSettings />
+      <AiSettings />
 
       <section className="panel">
         <h2>Резервная копия</h2>
@@ -137,6 +235,7 @@ export function SettingsView() {
           Документов: {stats?.docs ?? '…'}, блоков: {stats?.blocks ?? '…'}, карточек: {stats?.cards ?? '…'}, файлов: {stats?.files ?? '…'}.
           <br />
           Занято: {usage ? `${formatBytes(usage.usage)} из доступных ${formatBytes(usage.quota)}` : 'неизвестно'}
+          {usage && storageLevel(usage.usage, usage.quota) !== 'ok' && <strong className="danger-text"> — место заканчивается!</strong>}
           <br />
           Постоянное хранилище: {persisted === null ? 'неизвестно' : persisted ? 'включено ✓' : 'не подтверждено (на iPad установите приложение на экран «Домой»)'}
         </p>

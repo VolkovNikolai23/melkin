@@ -25,12 +25,17 @@ export function SearchView({ initial }: { initial: string }) {
 
   const res = useLiveQuery(async () => {
     if (!dq) return null;
-    const docs = await db.docs.toArray();
+    const docs = await db.docs.filter((d) => !d.deletedAt).toArray();
     const titles = new Map(docs.map((d) => [d.id, d.title]));
+    const live = (docId: string) => titles.has(docId);
     const docHits = docs.filter((d) => d.title.toLowerCase().includes(dq)).slice(0, 20);
-    const blockHits = await db.blocks.filter((b) => b.kind === 'text' && b.text.toLowerCase().includes(dq)).limit(200).toArray();
+    // ищем и в распознанном рукописном тексте (заполняется на этапе ИИ)
+    const blockHits = await db.blocks
+      .filter((b) => live(b.docId) && ((b.kind === 'text' && b.text.toLowerCase().includes(dq)) || !!b.recognizedText?.toLowerCase().includes(dq)))
+      .limit(200)
+      .toArray();
     // выделения в PDF тоже ищутся
-    const annHits = await db.annotations.filter((a) => a.kind === 'highlight' && !!a.text && a.text.toLowerCase().includes(dq)).limit(50).toArray();
+    const annHits = await db.annotations.filter((a) => live(a.docId) && a.kind === 'highlight' && !!a.text && a.text.toLowerCase().includes(dq)).limit(50).toArray();
     return {
       docHits,
       blockHits: blockHits.map((b) => ({ b, title: titles.get(b.docId) ?? '' })),
@@ -63,7 +68,7 @@ export function SearchView({ initial }: { initial: string }) {
           ))}
           {res.blockHits.map(({ b, title }) => (
             <button key={b.id} className="search-hit" onClick={() => navigate(`doc/${b.docId}?b=${b.id}`)}>
-              <span dangerouslySetInnerHTML={{ __html: snippet(b.text, dq) }} />
+              <span dangerouslySetInnerHTML={{ __html: snippet(b.text.toLowerCase().includes(dq) ? b.text : (b.recognizedText ?? ''), dq) }} />
               <small>{title}</small>
             </button>
           ))}

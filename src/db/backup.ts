@@ -1,6 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
 import { resyncAllCards } from '../features/cards/sync';
-import { db, getMeta, SCHEMA_VERSION, setMeta, TABLES, type TableName } from './db';
+import { AI_KEYS_META, db, getMeta, SCHEMA_VERSION, setMeta, TABLES, type TableName } from './db';
 import { migrateBlockV1, migrateCardIdV1, migrateCardV1 } from './migrations';
 import type { CardRow, FileRow, ReviewLogRow } from './schema';
 
@@ -34,6 +34,8 @@ export async function makeBackupFile(): Promise<File> {
   await db.transaction('r', TABLES.map((t) => db.table(t)), async () => {
     for (const t of TABLES) {
       if (t === 'files') files = await db.files.toArray();
+      // ключи ИИ не кладём в копию: файл может оказаться в iCloud или у других людей
+      else if (t === 'meta') data[t] = (await db.meta.toArray()).filter((m) => m.key !== AI_KEYS_META);
       else data[t] = await db.table(t).toArray();
     }
   });
@@ -143,14 +145,16 @@ export async function importBackup(b: Backup, mode: 'replace' | 'merge') {
   const get = <T,>(t: TableName) => (t === 'files' ? fileRows(b) : (b.data[t] ?? [])) as T[];
   await db.transaction('rw', TABLES.map((t) => db.table(t)), async () => {
     if (mode === 'replace') {
+      const keys = await db.meta.get(AI_KEYS_META); // ключи этого устройства не теряем
       for (const t of TABLES) {
         await db.table(t).clear();
         await db.table(t).bulkAdd(get(t));
       }
+      if (keys) await db.meta.put(keys);
       return;
     }
     // Слияние: при совпадении id оставляем более свежую версию.
-    for (const t of ['docs', 'blocks', 'pages', 'annotations'] as const) {
+    for (const t of ['docs', 'blocks', 'pages', 'annotations', 'tests'] as const) {
       const incoming = get<{ id: string; updatedAt?: number }>(t);
       const ex = await db.table(t).bulkGet(incoming.map((r) => r.id));
       await db.table(t).bulkPut(incoming.map((r, i) => (ex[i] ? newer(ex[i], r) : r)));
@@ -162,6 +166,7 @@ export async function importBackup(b: Backup, mode: 'replace' | 'merge') {
     const exCards = await db.cards.bulkGet(cards.map((c) => c.id));
     await db.cards.bulkPut(cards.map((c, i) => (exCards[i] && (exCards[i]!.last_review ?? 0) > (c.last_review ?? 0) ? exCards[i]! : c)));
     await db.reviewLogs.bulkPut(get<ReviewLogRow>('reviewLogs'));
+    await db.testAttempts.bulkPut(get('testAttempts'));
     // meta (настройки, дата копии) берём только если своих нет
     for (const m of get<{ key: string; value: unknown }>('meta')) {
       if (!(await db.meta.get(m.key))) await db.meta.put(m);

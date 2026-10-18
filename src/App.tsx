@@ -10,9 +10,13 @@ import { SearchView } from './features/notes/SearchView';
 import { Sidebar } from './features/notes/Sidebar';
 import { ReviewView } from './features/review/ReviewView';
 import { ReviewHome } from './features/review/ReviewHome';
-import { TagPage, TagsView } from './features/links/LinkViews';
+import { IconPickerHost } from './components/IconPicker';
+import { SplitPane } from './components/SplitPane';
+import { TrashView } from './components/TrashView';
+import { useAppearance } from './lib/appearance';
 import { useKeyboardInset } from './lib/keyboard';
 import { useRoute } from './lib/router';
+import { openSplit, useSplit } from './lib/splitStore';
 
 const NARROW = '(max-width: 900px)';
 
@@ -20,6 +24,8 @@ export function App() {
   const route = useRoute();
   const due = useDueCount();
   useKeyboardInset();
+  useAppearance();
+  const split = useSplit();
   const [narrow, setNarrow] = useState(() => matchMedia(NARROW).matches);
   const [open, setOpen] = useState(() => {
     try {
@@ -59,8 +65,7 @@ export function App() {
   else if (name === 'review') view = route.query.get('scope') ? <ReviewView scopeStr={route.query.get('scope')} /> : <ReviewHome />;
   else if (name === 'search') view = <SearchView initial={route.query.get('q') ?? ''} />;
   else if (name === 'settings') view = <SettingsView />;
-  else if (name === 'tags') view = <TagsView />;
-  else if (name === 'tag' && id) view = <TagPage tag={id} />;
+  else if (name === 'trash') view = <TrashView />;
   else view = <Home />;
 
   // во время сессии повторения боковая панель скрыта, на экране выбора очереди — видна
@@ -85,9 +90,24 @@ export function App() {
             {due && due.total > 0 && <span className="dot-badge" />}
           </button>
         )}
-        <div className="main-scroll">{view}</div>
+        {split && !inReview ? (
+          // разделение экрана: справа — второй документ (например, презентация рядом с конспектом)
+          <SplitPane
+            storageKey="app"
+            onClose={() => openSplit(null)}
+            left={<div className="main-scroll">{view}</div>}
+            right={
+              <div className="main-scroll">
+                <DocPage key={'split-' + split} id={split} highlight={null} inSplit />
+              </div>
+            }
+          />
+        ) : (
+          <div className="main-scroll">{view}</div>
+        )}
       </main>
       <PwaBanners />
+      <IconPickerHost />
       <DialogHost />
     </div>
   );

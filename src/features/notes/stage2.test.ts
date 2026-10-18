@@ -29,6 +29,32 @@ describe('ежедневные заметки', () => {
   });
 });
 
+describe('ежедневные заметки: без дубликатов', () => {
+  it('одновременные вызовы создают одну заметку и одну папку', async () => {
+    const [a, b, c] = await Promise.all([getOrCreateDaily('2026-10-18'), getOrCreateDaily('2026-10-18'), getOrCreateDaily('2026-10-18')]);
+    expect(new Set([a.id, b.id, c.id]).size).toBe(1);
+    expect(await db.docs.where('type').equals('daily').count()).toBe(1);
+    expect(await db.docs.filter((d) => d.type === 'folder').count()).toBe(1);
+  });
+
+  it('уже появившиеся дубликаты объединяются без потери записей', async () => {
+    const { dedupeDaily } = await import('./daily');
+    const f1 = await createDoc('folder', null, 'Ежедневные заметки');
+    const f2 = await createDoc('folder', null, 'Ежедневные заметки');
+    const d1 = await createDoc('daily', f1.id, 'день');
+    const d2 = await createDoc('daily', f2.id, 'день');
+    await db.docs.update(d1.id, { dailyDate: '2026-10-18' });
+    await db.docs.update(d2.id, { dailyDate: '2026-10-18' });
+    await appendBlock(d2.id, 'text', 'важная запись >> ответ');
+    await dedupeDaily();
+    const days = await db.docs.where('type').equals('daily').toArray();
+    expect(days.map((d) => d.id)).toEqual([d2.id]); // осталась та, где есть записи
+    expect(await db.docs.filter((d) => d.type === 'folder').count()).toBe(1);
+    expect(await db.blocks.count()).toBe(1);
+    expect(await db.cards.count()).toBe(1);
+  });
+});
+
 describe('шаблоны', () => {
   it('копируют структуру после текущего блока; карточки шаблона отключены', async () => {
     const tpl = await createDoc('note', null, 'Шаблон лекции');

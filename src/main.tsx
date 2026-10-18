@@ -7,11 +7,19 @@ import { App } from './App';
 import { pwaStore } from './components/pwa';
 import { db, requestPersistence } from './db/db';
 import { resyncAllCards } from './features/cards/sync';
-import { getOrCreateDaily } from './features/notes/daily';
+import { dedupeDaily, getOrCreateDaily } from './features/notes/daily';
+import { purgeExpired } from './features/notes/docs';
+import { initSession } from './lib/session';
 
+// Куда открыть: при возврате — последняя заметка, после полного закрытия — «Сегодня»
+initSession();
 requestPersistence();
+// Корзина: всё, что лежит дольше 30 дней, удаляется насовсем
+purgeExpired().catch(() => undefined);
 // Ежедневная заметка на сегодня создаётся автоматически
-getOrCreateDaily().catch(() => undefined);
+dedupeDaily()
+  .then(() => getOrCreateDaily())
+  .catch(() => undefined);
 // После обновления схемы карточки пересобираются новым парсером (история сохраняется).
 db.meta.get('resyncCards').then(async (m) => {
   if (!m?.value) return;

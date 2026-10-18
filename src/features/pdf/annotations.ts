@@ -41,7 +41,8 @@ export async function saveInk(docId: string, page: number, strokes: Stroke[]) {
 /** Документ, куда отправляются выделения из этого PDF (запоминается). */
 export async function getTargetNote(pdf: Doc): Promise<string | null> {
   const id = await getMeta<string | null>(`pdfTarget:${pdf.id}`, null);
-  return id && (await db.docs.get(id)) ? id : null;
+  const doc = id ? await db.docs.get(id) : undefined;
+  return doc && !doc.deletedAt ? doc.id : null;
 }
 
 export async function setTargetNote(pdfId: string, noteId: string) {

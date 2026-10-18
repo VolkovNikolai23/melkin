@@ -18,7 +18,9 @@ function useMinuteTick() {
 export function useDueCount() {
   const tick = useMinuteTick();
   return useLiveQuery(async () => {
-    const [cards, left] = await Promise.all([db.cards.toArray(), newLimitLeft()]);
+    const [all, left, trashedIds] = await Promise.all([db.cards.toArray(), newLimitLeft(), db.docs.where('deletedAt').above(0).primaryKeys()]);
+    const trashed = new Set(trashedIds as string[]);
+    const cards = trashed.size ? all.filter((c) => !trashed.has(c.docId)) : all;
     const now = Date.now();
     return { ...countDueToday(cards, now, left), cards: cards.length, byDoc: dueByDoc(cards, now), newLeft: left };
   }, [tick]);
