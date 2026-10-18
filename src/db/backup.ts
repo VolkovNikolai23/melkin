@@ -2,6 +2,7 @@ import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
 import { resyncAllCards } from '../features/cards/sync';
 import { AI_KEYS_META, db, getMeta, SCHEMA_VERSION, setMeta, TABLES, type TableName } from './db';
 import { migrateBlockV1, migrateCardIdV1, migrateCardV1 } from './migrations';
+import { migrateCardToLadder } from '../features/review/ladder';
 import type { CardRow, FileRow, ReviewLogRow } from './schema';
 
 export const BACKUP_FORMAT = 'melkin-backup';
@@ -130,6 +131,7 @@ function migrateBackup(b: Backup): Backup {
     d.cards = (d.cards ?? []).map((x) => migrateCardV1(x as Record<string, unknown>));
     d.reviewLogs = (d.reviewLogs ?? []).map((l) => ({ ...(l as ReviewLogRow), cardId: migrateCardIdV1((l as ReviewLogRow).cardId) }));
   }
+  if (b.schemaVersion < 4) d.cards = (d.cards ?? []).map((c) => migrateCardToLadder(c as CardRow));
   return { ...b, schemaVersion: SCHEMA_VERSION, data: d };
 }
 

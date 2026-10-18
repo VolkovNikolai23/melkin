@@ -109,7 +109,6 @@ function AppearanceSettings() {
 }
 
 export function SettingsView() {
-  const settings = useLiveQuery(getSettings, []);
   const lastBackup = useLiveQuery(getLastBackup, []);
   const stats = useLiveQuery(async () => ({ docs: await db.docs.count(), blocks: await db.blocks.count(), cards: await db.cards.count(), files: await db.files.count() }), []);
   const [pending, setPending] = useState<File | null>(null);
@@ -204,18 +203,11 @@ export function SettingsView() {
 
       <section className="panel">
         <h2>Повторение</h2>
-        <label className="field">
-          <span>Новых карточек в день</span>
-          <input
-            type="number"
-            min={0}
-            max={999}
-            inputMode="numeric"
-            className="text-input narrow"
-            value={settings?.newPerDay ?? 20}
-            onChange={(e) => saveSettings({ newPerDay: Math.max(0, Math.min(999, Number(e.target.value) || 0)) })}
-          />
-        </label>
+        <p className="muted">
+          Две кнопки: <strong>«Знаю»</strong> — интервал растёт: 15 мин → 1 ч → 1 день → 3 дня → 1 неделя → дальше вдвое.{' '}
+          <strong>«Не знаю»</strong> — карточка вернётся через ~30 секунд среди других, пока не ответите «знаю»; тогда интервал откатится на 4 шага.
+          Лимита новых карточек нет.
+        </p>
         <p className="muted small">Новый учебный день начинается в 4:00.</p>
       </section>
 

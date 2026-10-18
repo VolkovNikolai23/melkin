@@ -1,7 +1,7 @@
-import { db, getSettings } from '../../db/db';
+import { db } from '../../db/db';
 import type { CardRow, Doc } from '../../db/schema';
 import { dayStart } from '../../lib/time';
-import { applyRating, newAllowance, type Grade } from './scheduler';
+import { applyRating, type Grade } from './scheduler';
 
 export type Scope = { kind: 'all' } | { kind: 'doc'; id: string } | { kind: 'folder'; id: string } | { kind: 'tag'; id: string };
 
@@ -61,9 +61,9 @@ export async function newDoneToday(now = Date.now()): Promise<number> {
     .count();
 }
 
-export async function newLimitLeft(now = Date.now()) {
-  const settings = await getSettings();
-  return newAllowance(settings.newPerDay, await newDoneToday(now));
+/** Лимита новых карточек нет (SPEC 3): берём все. */
+export async function newLimitLeft(_now = Date.now()) {
+  return Number.POSITIVE_INFINITY;
 }
 
 export interface Answer {
@@ -88,4 +88,11 @@ export async function undoAnswer(a: Answer) {
     await db.cards.put(a.before);
     await db.reviewLogs.delete(a.logId);
   });
+}
+
+/** Экспресс-повтор: ответ попадает в журнал (стрик, график), но расписание карточки не меняется. */
+export async function logExpress(card: CardRow, rating: Grade, now = Date.now()): Promise<Answer> {
+  const { log } = applyRating(card, rating, now);
+  await db.reviewLogs.add({ ...log, express: true, due: card.due });
+  return { before: card, updated: card, logId: log.id, rating };
 }

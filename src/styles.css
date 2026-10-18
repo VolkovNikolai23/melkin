@@ -3044,3 +3044,244 @@ button.card-badge {
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   }
 }
+
+/* ================= SPEC.md: этап 5 — повторение ================= */
+:root {
+  --chart-bar: #9e3d5a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --chart-bar: #cf6a88;
+  }
+}
+:root[data-theme='dark'] {
+  --chart-bar: #cf6a88;
+}
+
+.grades.two {
+  grid-template-columns: 1fr 1fr;
+  max-width: 520px;
+}
+.grade {
+  min-height: 72px;
+  border-radius: 20px;
+}
+.grade-no .grade-label {
+  color: var(--again);
+  font-size: 19px;
+}
+.grade-yes {
+  background: color-mix(in srgb, var(--good) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--good) 35%, var(--border));
+}
+.grade-yes .grade-label {
+  color: var(--good);
+  font-size: 19px;
+}
+.done-stats .grade-yes,
+.done-stats .grade-no {
+  background: none;
+}
+.express-badge {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--hard);
+  background: color-mix(in srgb, var(--hard) 15%, var(--surface));
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.my-answer {
+  margin-top: 22px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.my-answer.done {
+  border-style: solid;
+  background: var(--blue-soft);
+}
+.my-answer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.my-answer-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.my-answer-text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.answer-text {
+  resize: vertical;
+  min-height: 64px;
+}
+.answer-ink {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.my-answer .ink-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.segmented.small button {
+  min-height: 34px;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.due-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+.queue-row .btn.small {
+  flex-shrink: 0;
+}
+
+/* Статистика */
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.stat-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 14px 16px;
+  color: var(--muted);
+}
+.stat-tile.lit {
+  color: #ef7a4f;
+  background: linear-gradient(135deg, var(--accent-soft), var(--blue-soft));
+}
+.stat-num {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.stat-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+.chart {
+  position: relative;
+}
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: pan-y;
+}
+.chart-bar {
+  fill: var(--chart-bar);
+}
+.chart-bar.hover {
+  fill: color-mix(in srgb, var(--chart-bar) 80%, var(--text));
+}
+.chart-axis {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+.chart-tick {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.chart-tip {
+  position: absolute;
+  top: -6px;
+  transform: translate(-50%, -100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  border-radius: 10px;
+  padding: 4px 10px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.chart-tip span {
+  color: var(--muted);
+}
+.chart-table summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+  margin-top: 6px;
+}
+.chart-table table {
+  font-size: 14px;
+  border-collapse: collapse;
+}
+.chart-table td {
+  padding: 2px 14px 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+.know-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.know-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 30%) 48px;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding-right: 10px;
+  border-radius: 12px;
+  text-align: left;
+}
+.know-row:hover {
+  background: var(--surface-2);
+}
+.know-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.know-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  overflow: hidden;
+}
+.know-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--chart-bar);
+}
+.know-pct {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}

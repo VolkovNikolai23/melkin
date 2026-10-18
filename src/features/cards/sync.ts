@@ -1,12 +1,28 @@
-import { createEmptyCard } from 'ts-fsrs';
 import { db } from '../../db/db';
 import type { Block, CardRow } from '../../db/schema';
 import { occlusionCards, parseCards, type ParsedCard } from './parser';
 
 export const cardId = (blockId: string, key: string) => `${blockId}#${key}`;
 
+/** Поля повторения новой карточки (лестница интервалов: ступени ещё нет). */
+export function emptySchedule(now: number) {
+  return {
+    due: now,
+    step: null,
+    relearnFrom: undefined,
+    stability: 0,
+    difficulty: 0,
+    elapsed_days: 0,
+    scheduled_days: 0,
+    learning_steps: 0,
+    reps: 0,
+    lapses: 0,
+    state: 0,
+    last_review: null,
+  };
+}
+
 export function newCardRow(blockId: string, docId: string, p: ParsedCard, now: number, disabled = false): CardRow {
-  const e = createEmptyCard(new Date(now));
   return {
     id: cardId(blockId, p.key),
     blockId,
@@ -17,22 +33,14 @@ export function newCardRow(blockId: string, docId: string, p: ParsedCard, now: n
     front: p.front,
     back: p.back,
     concept: p.concept,
+    twoSided: p.twoSided,
     disabled: disabled || undefined,
     createdAt: now,
-    due: e.due.getTime(),
-    stability: e.stability,
-    difficulty: e.difficulty,
-    elapsed_days: e.elapsed_days,
-    scheduled_days: e.scheduled_days,
-    learning_steps: e.learning_steps,
-    reps: e.reps,
-    lapses: e.lapses,
-    state: e.state,
-    last_review: null,
+    ...emptySchedule(now),
   };
 }
 
-const CONTENT_FIELDS = ['kind', 'front', 'back', 'clozeIndex', 'sub', 'concept', 'docId', 'disabled'] as const;
+const CONTENT_FIELDS = ['kind', 'front', 'back', 'clozeIndex', 'sub', 'concept', 'twoSided', 'docId', 'disabled'] as const;
 
 /**
  * Чистая функция: что нужно сделать с карточками блока после правки текста.
@@ -57,7 +65,7 @@ export function planCardSync(
       put.push(newCardRow(blockId, docId, p, now, disabled));
       continue;
     }
-    const next: CardRow = { ...old, kind: p.kind, front: p.front, back: p.back, clozeIndex: p.clozeIndex, sub: p.sub, concept: p.concept, docId, disabled: disabled || undefined };
+    const next: CardRow = { ...old, kind: p.kind, front: p.front, back: p.back, clozeIndex: p.clozeIndex, sub: p.sub, concept: p.concept, twoSided: p.twoSided, docId, disabled: disabled || undefined };
     if (CONTENT_FIELDS.some((f) => (old[f] ?? undefined) !== (next[f] ?? undefined))) put.push(next);
   }
   const remove = existing.filter((c) => !keep.has(c.id)).map((c) => c.id);
@@ -129,19 +137,6 @@ export async function resyncAllCards() {
 
 /** Сбросить прогресс карточки: она снова станет новой (журнал повторений сохраняется). */
 export async function resetCard(id: string) {
-  const c = await db.cards.get(id);
-  if (!c) return;
-  const e = createEmptyCard(new Date());
-  await db.cards.update(id, {
-    due: e.due.getTime(),
-    stability: e.stability,
-    difficulty: e.difficulty,
-    elapsed_days: e.elapsed_days,
-    scheduled_days: e.scheduled_days,
-    learning_steps: e.learning_steps,
-    reps: e.reps,
-    lapses: e.lapses,
-    state: e.state,
-    last_review: null,
-  });
+  if (!(await db.cards.get(id))) return;
+  await db.cards.update(id, emptySchedule(Date.now()));
 }

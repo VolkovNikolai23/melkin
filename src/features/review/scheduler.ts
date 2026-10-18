@@ -1,84 +1,53 @@
-import { fsrs, generatorParameters, Rating, State, type Card, type Grade } from 'ts-fsrs';
 import type { CardRow, ReviewLogRow } from '../../db/schema';
 import { uid } from '../../lib/id';
+import { answerLadder, isNewCard, previewLadder, RELEARN_DELAY_MS, State } from './ladder';
 
-export { Rating, State };
-export type { Grade };
+export { State };
 
-export const GRADES: { rating: Grade; label: string }[] = [
-  { rating: Rating.Again, label: 'Снова' },
-  { rating: Rating.Hard, label: 'Трудно' },
-  { rating: Rating.Good, label: 'Хорошо' },
-  { rating: Rating.Easy, label: 'Легко' },
+/** Две кнопки (SPEC 3): «не знаю» = 1, «знаю» = 3 (числа совместимы со старым журналом). */
+export type Grade = 1 | 3;
+export const Rating = { DontKnow: 1, Know: 3 } as const;
+
+export const GRADES: { rating: Grade; label: string; key: string }[] = [
+  { rating: Rating.DontKnow, label: 'Не знаю', key: '1' },
+  { rating: Rating.Know, label: 'Знаю', key: '2' },
 ];
 
-/** Сколько можно «заглянуть вперёд» за карточками в изучении, если остальное закончилось. */
+/**
+ * Сколько ждать карточки, которые скоро вернутся, прежде чем закончить сессию.
+ * После «знаю» новая карточка возвращается через 15 минут — сессия её дождётся.
+ */
 export const LEARN_AHEAD_MS = 20 * 60 * 1000;
 
-const scheduler = fsrs(generatorParameters({ enable_fuzz: true, enable_short_term: true }));
-
-export function toFsrsCard(c: CardRow): Card {
-  return {
-    due: new Date(c.due),
-    stability: c.stability,
-    difficulty: c.difficulty,
-    elapsed_days: c.elapsed_days,
-    scheduled_days: c.scheduled_days,
-    learning_steps: c.learning_steps,
-    reps: c.reps,
-    lapses: c.lapses,
-    state: c.state as State,
-    last_review: c.last_review ? new Date(c.last_review) : undefined,
-  };
-}
-
-function fromFsrsCard(row: CardRow, c: Card): CardRow {
-  return {
-    ...row,
-    due: c.due.getTime(),
-    stability: c.stability,
-    difficulty: c.difficulty,
-    elapsed_days: c.elapsed_days,
-    scheduled_days: c.scheduled_days,
-    learning_steps: c.learning_steps,
-    reps: c.reps,
-    lapses: c.lapses,
-    state: c.state,
-    last_review: c.last_review ? c.last_review.getTime() : null,
-  };
-}
-
-/** Применяет оценку: новое состояние карточки и запись в журнал. */
+/** Применяет ответ: новое состояние карточки и запись в журнал. */
 export function applyRating(row: CardRow, rating: Grade, now: number): { card: CardRow; log: ReviewLogRow } {
-  const { card, log } = scheduler.next(toFsrsCard(row), new Date(now), rating);
+  const card = answerLadder(row, rating === Rating.Know, now);
   return {
-    card: fromFsrsCard(row, card),
+    card,
     log: {
       id: uid(),
       cardId: row.id,
       rating,
-      state: log.state,
-      wasNew: row.state === State.New,
+      state: row.state,
+      wasNew: isNewCard(row),
       review: now,
-      due: log.due.getTime(),
-      stability: log.stability,
-      difficulty: log.difficulty,
-      scheduled_days: log.scheduled_days,
-      learning_steps: log.learning_steps,
+      due: card.due,
+      stability: 0,
+      difficulty: 0,
+      scheduled_days: card.scheduled_days,
+      learning_steps: card.step ?? 0,
     },
   };
 }
 
-/** Через сколько карточка вернётся при каждой оценке (для подписей на кнопках). */
-export function previewIntervals(row: CardRow, now: number): Record<Grade, number> {
-  const p = scheduler.repeat(toFsrsCard(row), new Date(now));
-  const out = {} as Record<Grade, number>;
-  for (const g of GRADES) out[g.rating] = p[g.rating].card.due.getTime() - now;
-  return out;
+/** Через сколько карточка вернётся при каждом ответе (для подписей на кнопках). */
+export function previewIntervals(row: CardRow): Record<Grade, number> {
+  const p = previewLadder(row);
+  return { [Rating.Know]: p.know, [Rating.DontKnow]: p.dontKnow } as Record<Grade, number>;
 }
 
 export function formatInterval(ms: number): string {
-  if (ms < 60000) return '<1 мин';
+  if (ms < 60000) return `${Math.max(1, Math.round(ms / 1000))} с`;
   const min = Math.round(ms / 60000);
   if (min < 60) return `${min} мин`;
   const h = Math.round(min / 60);
@@ -90,7 +59,7 @@ export function formatInterval(ms: number): string {
   return `${Math.round((d / 365) * 10) / 10} г`.replace('.', ',');
 }
 
-export const isNew = (c: CardRow) => c.state === State.New;
+export const isNew = (c: CardRow) => isNewCard(c);
 
 /** Сколько новых карточек ещё можно взять сегодня. */
 export function newAllowance(newPerDay: number, newDoneToday: number) {
@@ -114,13 +83,34 @@ export function buildSession(all: CardRow[], now: number, newLimitLeft: number):
   return { due, fresh };
 }
 
-/** Следующая карточка: сначала просроченные, затем новые, затем изучаемые «наперёд». */
+/**
+ * Следующая карточка: сначала те, чей срок наступил, затем новые. Карточку после «не знаю»
+ * (вернётся через 30 с) показываем раньше срока, только если больше показывать нечего.
+ */
 export function pickNext(s: Session, now: number): CardRow | null {
   const ready = s.due.find((c) => c.due <= now);
   if (ready) return ready;
   if (s.fresh.length) return s.fresh[0];
-  const soon = s.due.find((c) => c.due <= now + LEARN_AHEAD_MS);
-  return soon ?? null;
+  const relearn = s.due.find((c) => c.relearnFrom !== undefined && c.relearnFrom !== null && c.due <= now + RELEARN_DELAY_MS);
+  return relearn ?? null;
+}
+
+/** Экспресс-повтор перед экзаменом: все карточки подряд, без графика (порядок перемешан). */
+export function buildExpressSession(all: CardRow[], seed = Math.random): Session {
+  const cards = all.filter((c) => !c.disabled);
+  for (let i = cards.length - 1; i > 0; i--) {
+    const j = Math.floor(seed() * (i + 1));
+    [cards[i], cards[j]] = [cards[j], cards[i]];
+  }
+  return { due: [], fresh: cards };
+}
+
+/** Экспресс: «знаю» — карточка уходит, «не знаю» — вернётся через ~30 с. График не меняется. */
+export function afterExpressAnswer(s: Session, card: CardRow, known: boolean, now: number): Session {
+  const fresh = s.fresh.filter((c) => c.id !== card.id);
+  const due = s.due.filter((c) => c.id !== card.id);
+  if (!known) due.push({ ...card, due: now + RELEARN_DELAY_MS, relearnFrom: card.step ?? 0 });
+  return { due: due.sort((a, b) => a.due - b.due), fresh };
 }
 
 /** Обновляет сессию после ответа: карточка, которая скоро снова нужна, возвращается в очередь. */

@@ -226,6 +226,9 @@ export function Sidebar({
           <Icon name="cards" /> Повторить
           {dueCount > 0 && <span className="badge">{dueCount}</span>}
         </button>
+        <button className={'nav-item' + (routeName === 'stats' ? ' active' : '')} onClick={() => nav('stats')}>
+          <Icon name="star" /> Статистика
+        </button>
       </nav>
 
       <DueCtx.Provider value={due ? { byDoc: due.byDoc, newLeft: due.newLeft } : null}>

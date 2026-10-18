@@ -61,6 +61,30 @@ describe('миграция IndexedDB v2 → v3', () => {
   });
 });
 
+describe('миграция IndexedDB v3 → v4 (FSRS → лестница)', () => {
+  it('история повторений переводится в ступени, сроки сохраняются', async () => {
+    const name = 'migr-v4';
+    const v3 = new Dexie(name);
+    v3.version(3).stores({
+      docs: 'id, parentId, type, updatedAt, dailyDate, deletedAt', blocks: 'id, docId, parentId, updatedAt, *tags, *links, portalOf',
+      pages: 'id, docId', files: 'id, kind', annotations: 'id, docId, [docId+page], blockId',
+      cards: 'id, blockId, docId, due, state', reviewLogs: 'id, cardId, review', tests: 'id, docId, updatedAt',
+      testAttempts: 'id, testId, docId, at', meta: 'key',
+    });
+    const D = 86400000;
+    await v3.table('cards').bulkAdd([
+      { id: 'old', blockId: 'b', docId: 'd', kind: 'forward', front: 'q', back: 'a', reps: 6, lapses: 1, state: 2, scheduled_days: 9, due: now + 5 * D, last_review: now - 4 * D },
+      { id: 'new', blockId: 'b2', docId: 'd', kind: 'forward', front: 'q', back: 'a', reps: 0, lapses: 0, state: 0, scheduled_days: 0, due: now, last_review: null },
+    ]);
+    v3.close();
+    const v4 = new MelkinDB(name);
+    expect(await v4.cards.get('old')).toMatchObject({ step: 4, due: now + 5 * D, reps: 6, lapses: 1 }); // 7 дн ≤ 9 дн
+    expect(await v4.cards.get('new')).toMatchObject({ step: null, state: 0 });
+    expect((await v4.meta.get('resyncCards'))?.value).toBe(true);
+    v4.close();
+  });
+});
+
 describe('резервная копия .zip', () => {
   it('экспорт → импорт с заменой возвращает те же данные, включая файлы', async () => {
     await db.docs.add({ id: 'd1', parentId: null, type: 'note', title: 'Матан', order: 0, createdAt: now, updatedAt: now });

@@ -10,6 +10,8 @@ export interface ParsedCard {
   front: string;
   back: string;
   concept?: boolean;
+  /** Двусторонняя (термин ↔ определение): при повторении сравнивают сами, без ввода ответа */
+  twoSided?: boolean;
   clozeIndex?: number;
   sub?: string;
 }
@@ -73,9 +75,11 @@ export function parseCards(text: string, ctx: ParseContext = {}): ParsedCard[] {
       case '<<':
         return right ? [bwd()] : [];
       case '<>':
-        return right ? [fwd(), bwd()] : [fwd()];
+        return right ? [fwd(left, right, { twoSided: true }), bwd({ twoSided: true })] : [fwd()];
       case '::':
-        return right ? [fwd(left, right, { concept: true }), bwd({ concept: true })] : [fwd(left, right, { concept: true })];
+        return right
+          ? [fwd(left, right, { concept: true, twoSided: true }), bwd({ concept: true, twoSided: true })]
+          : [fwd(left, right, { concept: true })];
       case ';;': {
         const parent = ctx.parentText ? conceptName(ctx.parentText) : '';
         return [fwd(parent ? `${parent} → ${left}` : left, right)];

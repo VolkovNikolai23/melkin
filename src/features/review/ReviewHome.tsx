@@ -5,55 +5,41 @@ import { db } from '../../db/db';
 import type { Doc } from '../../db/schema';
 import { navigate } from '../../lib/router';
 import { plural } from '../../lib/time';
-import { TYPE_ICON } from '../notes/docIcons';
+import { docIcon } from '../notes/docIcons';
 import { collectSubtree, sortDocs } from '../notes/docs';
 import { badgeCount, formatInterval, isNew, sumDue } from './scheduler';
 
-/** «Повторить»: все карточки или очередь по папке, документу, тегу. */
+const scopeOf = (d: Doc) => `${d.type === 'folder' || d.type === 'lecture' ? 'folder' : 'doc'}:${d.id}`;
+
+/** «Повторить» (SPEC 3): всё на сегодня, одна тема/раздел, экспресс-повтор перед экзаменом. */
 export function ReviewHome() {
   const due = useDueCount();
-  const docs = useLiveQuery(() => db.docs.filter((d) => !d.deletedAt).toArray(), []);
-  const extra = useLiveQuery(async () => {
+  const data = useLiveQuery(async () => {
     const now = Date.now();
-    const trashed = new Set((await db.docs.where('deletedAt').above(0).primaryKeys()) as string[]);
-    const cards = await db.cards.filter((c) => !c.disabled && !trashed.has(c.docId)).toArray();
-    // ближайшее повторение, если сейчас ничего нет
+    const docs = await db.docs.filter((d) => !d.deletedAt).toArray();
+    const live = new Set(docs.map((d) => d.id));
+    const cards = (await db.cards.toArray()).filter((c) => !c.disabled && live.has(c.docId));
     const next = cards.filter((c) => !isNew(c) && c.due > now).reduce((m, c) => Math.min(m, c.due), Infinity);
-    // счётчики по тегам
-    const tagged = await db.blocks.filter((b) => (b.tags?.length ?? 0) > 0).toArray();
-    const tagsOf = new Map(tagged.map((b) => [b.id, b.tags]));
-    const tags = new Map<string, { due: number; fresh: number }>();
-    for (const c of cards) {
-      const ts = tagsOf.get(c.blockId);
-      if (!ts) continue;
-      const fresh = isNew(c);
-      if (!fresh && c.due > now) continue;
-      for (const t of ts) {
-        const e = tags.get(t) ?? { due: 0, fresh: 0 };
-        if (fresh) e.fresh++;
-        else e.due++;
-        tags.set(t, e);
-      }
-    }
-    return { next, tags };
+    const totalByDoc = new Map<string, number>();
+    for (const c of cards) totalByDoc.set(c.docId, (totalByDoc.get(c.docId) ?? 0) + 1);
+    return { docs, next, totalByDoc, total: cards.length };
   }, [due]);
 
-  if (!due || !docs) return <div className="page-pad muted">Загрузка…</div>;
+  if (!due || !data) return <div className="page-pad muted">Загрузка…</div>;
+  const { docs, totalByDoc } = data;
 
-  // Дерево документов с ненулевыми счётчиками, в порядке боковой панели
-  const rows: { doc: Doc; depth: number; n: number }[] = [];
+  // Дерево предметов → тем → лекций (и отдельных документов) с карточками
+  const rows: { doc: Doc; depth: number; n: number; total: number }[] = [];
   const walk = (parentId: string | null, depth: number) => {
     for (const d of docs.filter((x) => x.parentId === parentId).sort(sortDocs)) {
-      const n = badgeCount(sumDue(due.byDoc, d.type === 'folder' ? collectSubtree(docs, d.id) : [d.id]), due.newLeft);
-      if (n > 0) rows.push({ doc: d, depth, n });
-      if (d.type === 'folder' && n > 0) walk(d.id, depth + 1);
+      const ids = d.type === 'folder' || d.type === 'lecture' ? collectSubtree(docs, d.id) : [d.id];
+      const total = ids.reduce((s, id) => s + (totalByDoc.get(id) ?? 0), 0);
+      if (!total) continue;
+      rows.push({ doc: d, depth, n: badgeCount(sumDue(due.byDoc, ids), due.newLeft), total });
+      if (d.type === 'folder') walk(d.id, depth + 1);
     }
   };
   walk(null, 0);
-  const tagRows = [...(extra?.tags ?? [])]
-    .map(([t, c]) => ({ t, n: badgeCount(c, due.newLeft) }))
-    .filter((x) => x.n > 0)
-    .sort((a, b) => b.n - a.n);
 
   return (
     <div className="page-pad review-home">
@@ -68,48 +54,44 @@ export function ReviewHome() {
               · повторить {due.due}, новых {due.fresh}
             </span>
           </div>
-          <div className="muted small">
-            Новых сегодня можно ещё {due.newLeft}
-            {due.total === 0 && extra && extra.next !== Infinity && ` · ближайшее повторение через ${formatInterval(extra.next - Date.now())}`}
-          </div>
+          {due.total === 0 && data.next !== Infinity && <div className="muted small">Ближайшее повторение через {formatInterval(data.next - Date.now())}</div>}
         </div>
-        <button className="btn primary big" disabled={!due.total} onClick={() => navigate('review?scope=all')}>
-          <Icon name="cards" /> Все карточки
-        </button>
+        <div className="due-actions">
+          <button className="btn primary big" disabled={!due.total} onClick={() => navigate('review?scope=all')}>
+            <Icon name="cards" /> Всё на сегодня
+          </button>
+          <button className="btn" disabled={!data.total} onClick={() => navigate('review?scope=all&mode=express')} title="Все карточки подряд, без графика">
+            <Icon name="flame" /> Экспресс-повтор всего
+          </button>
+        </div>
       </section>
 
       {rows.length > 0 && (
         <section>
-          <h2 className="section-title">Папки и документы</h2>
+          <h2 className="section-title">Предметы, темы и лекции</h2>
+          <p className="muted small">«Повторить» — то, что пора сегодня. «Экспресс» — перед экзаменом: все карточки темы подряд, график не меняется.</p>
           <div className="queue-list">
-            {rows.map(({ doc, depth, n }) => (
-              <button
-                key={doc.id}
-                className="queue-row"
-                style={{ paddingLeft: 14 + depth * 22 }}
-                onClick={() => navigate(`review?scope=${doc.type === 'folder' ? 'folder' : 'doc'}:${doc.id}`)}
-              >
-                <Icon name={TYPE_ICON[doc.type]} size={18} />
-                <span className="queue-title">{doc.title}</span>
-                <span className="tree-due">{n}</span>
-              </button>
+            {rows.map(({ doc, depth, n, total }) => (
+              <div key={doc.id} className="queue-row" style={{ paddingLeft: 14 + depth * 22 }}>
+                <span style={{ color: doc.color || undefined, display: 'inline-flex' }}>
+                  <Icon name={docIcon(doc)} size={18} />
+                </span>
+                <span className="queue-title">
+                  {doc.title}
+                  <small className="muted"> · {total}</small>
+                </span>
+                <button className="btn small" disabled={!n} onClick={() => navigate(`review?scope=${scopeOf(doc)}`)}>
+                  Повторить{n ? ` ${n}` : ''}
+                </button>
+                <button className="btn small ghost" onClick={() => navigate(`review?scope=${scopeOf(doc)}&mode=express`)}>
+                  <Icon name="flame" size={16} /> Экспресс
+                </button>
+              </div>
             ))}
           </div>
         </section>
       )}
-
-      {tagRows.length > 0 && (
-        <section>
-          <h2 className="section-title">Теги</h2>
-          <div className="tag-cloud">
-            {tagRows.map(({ t, n }) => (
-              <button key={t} className="tag-pill" onClick={() => navigate(`review?scope=tag:${encodeURIComponent(t)}`)}>
-                #{t} <span className="tree-due">{n}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+      {rows.length === 0 && <p className="muted">Карточек пока нет. Напишите в заметке «вопрос &gt;&gt; ответ» — и карточка появится.</p>}
     </div>
   );
 }

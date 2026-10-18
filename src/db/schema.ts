@@ -181,6 +181,12 @@ export interface CardRow {
   concept?: boolean;
   /** Карточка отключена пользователем — не попадает в очередь */
   disabled?: boolean;
+  /** Двусторонняя (термин ↔ определение): ответ не пишут, а открывают и сравнивают сами */
+  twoSided?: boolean;
+  /** Ступень лестницы интервалов (null — новая карточка) */
+  step?: number | null;
+  /** После «не знаю»: ступень, с которой упали (откат на 4 при «знаю») */
+  relearnFrom?: number;
   createdAt: number;
   due: number;
   stability: number;
@@ -207,6 +213,8 @@ export interface ReviewLogRow {
   difficulty: number;
   scheduled_days: number;
   learning_steps: number;
+  /** Экспресс-повтор перед экзаменом: ответ записан, но график карточки не менялся */
+  express?: boolean;
 }
 
 export type TestQuestionKind = 'single' | 'multiple' | 'truefalse' | 'open' | 'match' | 'label' | 'order';

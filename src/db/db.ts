@@ -2,6 +2,7 @@ import Dexie, { type EntityTable } from 'dexie';
 import type { Annotation, Block, CardRow, Doc, FileRow, MetaRow, Page, ReviewLogRow, Settings, TestAttempt, TestRow } from './schema';
 import { DEFAULT_SETTINGS } from './schema';
 import { migrateBlockV1, migrateCardIdV1, migrateCardV1 } from './migrations';
+import { migrateCardToLadder } from '../features/review/ladder';
 
 export class MelkinDB extends Dexie {
   docs!: EntityTable<Doc, 'id'>;
@@ -71,10 +72,29 @@ export class MelkinDB extends Dexie {
       testAttempts: 'id, testId, docId, at',
       meta: 'key',
     });
+    // v4: повторение по лестнице интервалов вместо FSRS. История FSRS переводится в ступени
+    // (сроки повторения сохраняются); признак «двусторонняя» проставит пересборка карточек.
+    this.version(4)
+      .stores({
+        docs: 'id, parentId, type, updatedAt, dailyDate, deletedAt',
+        blocks: 'id, docId, parentId, updatedAt, *tags, *links, portalOf',
+        pages: 'id, docId',
+        files: 'id, kind',
+        annotations: 'id, docId, [docId+page], blockId',
+        cards: 'id, blockId, docId, due, state',
+        reviewLogs: 'id, cardId, review',
+        tests: 'id, docId, updatedAt',
+        testAttempts: 'id, testId, docId, at',
+        meta: 'key',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('cards').toCollection().modify((c: CardRow) => Object.assign(c, migrateCardToLadder(c)));
+        await tx.table('meta').put({ key: 'resyncCards', value: true });
+      });
   }
 }
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const db = new MelkinDB();
 

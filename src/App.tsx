@@ -10,6 +10,7 @@ import { SearchView } from './features/notes/SearchView';
 import { Sidebar } from './features/notes/Sidebar';
 import { ReviewView } from './features/review/ReviewView';
 import { ReviewHome } from './features/review/ReviewHome';
+import { StatsView } from './features/review/StatsView';
 import { IconPickerHost } from './components/IconPicker';
 import { SplitPane } from './components/SplitPane';
 import { TrashView } from './components/TrashView';
@@ -62,7 +63,13 @@ export function App() {
   let view;
   if (name === 'doc' && id)
     view = <DocPage key={id} id={id} highlight={route.query.get('b')} page={Number(route.query.get('page')) || null} ann={route.query.get('a')} />;
-  else if (name === 'review') view = route.query.get('scope') ? <ReviewView scopeStr={route.query.get('scope')} /> : <ReviewHome />;
+  else if (name === 'review')
+    view = route.query.get('scope') ? (
+      <ReviewView key={route.query.toString()} scopeStr={route.query.get('scope')} express={route.query.get('mode') === 'express'} />
+    ) : (
+      <ReviewHome />
+    );
+  else if (name === 'stats') view = <StatsView />;
   else if (name === 'search') view = <SearchView initial={route.query.get('q') ?? ''} />;
   else if (name === 'settings') view = <SettingsView />;
   else if (name === 'trash') view = <TrashView />;
