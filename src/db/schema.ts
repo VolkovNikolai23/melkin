@@ -46,6 +46,8 @@ export interface Stroke {
   size: number;
   /** Плоский массив точек: x0, y0, p0, x1, y1, p1, … */
   points: number[];
+  /** Автофигура (линия, круг, стрелка…): рисуется ровной линией постоянной толщины */
+  shape?: string;
 }
 
 export interface InkData {
@@ -133,14 +135,34 @@ export interface FileRow {
   createdAt: number;
 }
 
-export type PageBackground = 'blank' | 'grid' | 'lines';
+export type PageBackground = 'blank' | 'grid' | 'smallgrid' | 'lines' | 'widelines' | 'dots' | 'cornell' | 'music';
+
+/** Объект на листе тетради: текстовый блок или картинка (координаты — в единицах листа). */
+export interface PageItem {
+  id: string;
+  kind: 'text' | 'image';
+  x: number;
+  y: number;
+  w: number;
+  /** Высота картинки; у текста считается по содержимому */
+  h: number;
+  text?: string;
+  /** Размер шрифта текста в единицах листа */
+  fontSize?: number;
+  color?: string;
+  fileId?: string;
+}
 
 export interface Page {
   id: string;
   docId: string;
   order: number;
   background: PageBackground;
+  /** Цвет бумаги (по умолчанию — из темы) и цвет линий фона */
+  paper?: string;
+  lineColor?: string;
   strokes: Stroke[];
+  items?: PageItem[];
   /** Распознанный текст страницы (для офлайн-поиска и ИИ) */
   recognizedText?: string;
   createdAt: number;

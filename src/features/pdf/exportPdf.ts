@@ -3,7 +3,7 @@
 import { PDFDocument, rgb } from 'pdf-lib';
 import { db } from '../../db/db';
 import type { Doc } from '../../db/schema';
-import { strokePath } from '../ink/geometry';
+import { strokePathPdf } from '../ink/geometry';
 import { HIGHLIGHT_HEX, toPdfRect } from './geometry';
 
 function hexToRgb(hex: string) {
@@ -29,7 +29,7 @@ export async function exportAnnotatedPdf(doc: Doc): Promise<File> {
     } else {
       // Контуры штрихов в координатах страницы (пункты, начало сверху) — drawSvgPath сам переворачивает ось Y
       for (const s of a.strokes ?? []) {
-        const d = strokePath(s);
+        const d = strokePathPdf(s);
         if (!d) continue;
         const color = s.color === 'auto' ? rgb(0.1, 0.1, 0.12) : hexToRgb(s.color);
         page.drawSvgPath(d, { x: 0, y: height, color, opacity: s.tool === 'marker' ? 0.4 : 1, borderWidth: 0 });

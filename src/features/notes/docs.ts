@@ -146,10 +146,12 @@ export async function purgeDoc(id: string) {
     const all = await db.docs.toArray();
     const ids = collectSubtree(all, id);
     const blocks = await db.blocks.where('docId').anyOf(ids).toArray();
+    const pages = await db.pages.where('docId').anyOf(ids).toArray();
     // файлы PDF и картинок этих документов — удалим, если больше нигде не используются
     fileIds = [
       ...all.filter((d) => ids.includes(d.id) && d.fileId).map((d) => d.fileId!),
       ...blocks.flatMap((b) => (b.image?.fileId ? [b.image.fileId] : [])),
+      ...pages.flatMap((p) => (p.items ?? []).flatMap((i) => (i.fileId ? [i.fileId] : []))),
     ];
     await db.blocks.where('docId').anyOf(ids).delete();
     await db.pages.where('docId').anyOf(ids).delete();

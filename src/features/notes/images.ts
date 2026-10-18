@@ -79,6 +79,7 @@ export async function cleanupFiles(fileIds: string[]) {
   for (const id of fileIds) {
     const used = await db.blocks.filter((b) => b.image?.fileId === id || b.pdfRef?.fileId === id).count();
     const usedByDoc = await db.docs.filter((d) => d.fileId === id).count();
-    if (!used && !usedByDoc) await db.files.delete(id);
+    const usedByPage = await db.pages.filter((p) => !!p.items?.some((i) => i.fileId === id)).count();
+    if (!used && !usedByDoc && !usedByPage) await db.files.delete(id);
   }
 }

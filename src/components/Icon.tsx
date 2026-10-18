@@ -77,6 +77,13 @@ const PATHS = {
   flame: 'M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-4-1-6 1-9z',
   folderPlus: 'M3 6h6l2 2h10v11H3zM12 11v5M9.5 13.5h5',
   warning: 'M12 3l10 18H2zM12 9v5M12 17h.01',
+  eyedropper: 'M14 4l6 6M17 7l-9.5 9.5L4 20l3.5-3.5M19.5 4.5a2.1 2.1 0 0 0-3 0L14 7l3 3 2.5-2.5a2.1 2.1 0 0 0 0-3z',
+  text: 'M5 6V4h14v2M12 4v16M9 20h6',
+  shapes: 'M3 21l5-9 5 9zM14 3h7v7h-7zM17.5 14a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z',
+  camera: 'M4 8h3l2-3h6l2 3h3v11H4zM12 10a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z',
+  scan: 'M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4M8 9l8-1 1 7-9 1z',
+  sheet: 'M6 3h12v18H6zM6 8h12M6 13h12M10 3v18',
+  fileExport: 'M6 3h9l4 4v14H6zM14 3v5h5M12 11v6M9.5 14.5L12 17l2.5-2.5',
 };
 
 export type IconName = keyof typeof PATHS;

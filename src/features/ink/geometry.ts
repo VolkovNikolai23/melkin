@@ -1,12 +1,21 @@
 import { getStroke } from 'perfect-freehand';
 import type { Stroke } from '../../db/schema';
 
-export const PEN_SIZES = [2, 4, 7];
+export const PEN_SIZES = [1, 2, 4, 7, 11];
+export const MARKER_SIZES = [12, 18, 28];
 export const MARKER_SIZE = 18;
 export const PEN_COLORS = ['auto', '#2563eb', '#dc2626', '#16a34a', '#9333ea'];
 export const MARKER_COLORS = ['#facc15', '#4ade80', '#f472b6', '#60a5fa'];
+/** Палитра: пастельные и насыщенные тона, чтобы хватало и для схем, и для конспекта */
+export const PALETTE = [
+  '#1f2937', '#6b7280', '#9e3d5a', '#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#0d9488',
+  '#0284c7', '#2563eb', '#7c3aed', '#c026d3', '#f9a8d4', '#fdba74', '#fde047', '#86efac',
+  '#67e8f9', '#a5b4fc', '#d8b4fe', '#ffffff',
+];
 
-export function strokeOptions(s: Pick<Stroke, 'tool' | 'size'>, realPressure: boolean) {
+export function strokeOptions(s: Pick<Stroke, 'tool' | 'size' | 'shape'>, realPressure: boolean) {
+  // Фигуры — ровная линия постоянной толщины, без сглаживания углов
+  if (s.shape) return { size: s.tool === 'marker' ? s.size : s.size * 2, thinning: 0, smoothing: 0.2, streamline: 0, simulatePressure: false, start: { cap: true }, end: { cap: true } };
   if (s.tool === 'marker') {
     return { size: s.size, thinning: 0, smoothing: 0.5, streamline: 0.5, simulatePressure: false, start: { cap: true }, end: { cap: true } };
   }
@@ -63,7 +72,22 @@ export function strokePath(s: Stroke): string {
   return p;
 }
 
-export function livePath(s: Pick<Stroke, 'tool' | 'size'>, flat: number[], realPressure: boolean): string {
+/**
+ * Путь штриха для PDF: только явные кривые Q (pdf-lib неверно разбирает сокращённые T,
+ * из-за чего штрихи в экспорте искажались).
+ */
+export function strokePathPdf(s: Stroke): string {
+  const pts = getStroke(toPointTriples(s.points), strokeOptions(s, hasRealPressure(s.points)));
+  const n = pts.length;
+  if (n < 4) return n ? `M${pts[0][0] - 0.5},${pts[0][1]} a0.5,0.5 0 1,0 1,0 a0.5,0.5 0 1,0 -1,0` : '';
+  const f = (v: number) => v.toFixed(2);
+  const mid = (a: number[], b: number[]) => `${f((a[0] + b[0]) / 2)},${f((a[1] + b[1]) / 2)}`;
+  let d = `M${mid(pts[0], pts[1])}`;
+  for (let i = 1; i <= n; i++) d += ` Q${f(pts[i % n][0])},${f(pts[i % n][1])} ${mid(pts[i % n], pts[(i + 1) % n])}`;
+  return d + ' Z';
+}
+
+export function livePath(s: Pick<Stroke, 'tool' | 'size' | 'shape'>, flat: number[], realPressure: boolean): string {
   return outlineToPath(getStroke(toPointTriples(flat), { ...strokeOptions(s, realPressure), last: false }));
 }
 
@@ -78,11 +102,38 @@ function distToSegment(px: number, py: number, ax: number, ay: number, bx: numbe
   return Math.sqrt(x * x + y * y);
 }
 
+// Рамки штрихов кэшируем по id: ластик и пипетка сначала отбрасывают далёкие штрихи
+// одной проверкой, и на странице с тысячами штрихов это работает без задержек.
+const boxCache = new Map<string, [number, number, number, number]>();
+
+function strokeBox(s: Stroke): [number, number, number, number] {
+  let b = boxCache.get(s.id);
+  if (!b) {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    const p = s.points;
+    for (let i = 0; i + 1 < p.length; i += 3) {
+      if (p[i] < x0) x0 = p[i];
+      if (p[i] > x1) x1 = p[i];
+      if (p[i + 1] < y0) y0 = p[i + 1];
+      if (p[i + 1] > y1) y1 = p[i + 1];
+    }
+    b = [x0, y0, x1, y1];
+    if (boxCache.size > 50000) boxCache.clear();
+    boxCache.set(s.id, b);
+  }
+  return b;
+}
+
 /** Ластик по штриху: задевает ли точка (x, y) с радиусом r данный штрих. */
 export function hitStroke(s: Stroke, x: number, y: number, r: number): boolean {
   const pad = r + s.size * 1.2;
   const p = s.points;
   if (p.length < 3) return false;
+  const [bx0, by0, bx1, by1] = strokeBox(s);
+  if (x < bx0 - pad || x > bx1 + pad || y < by0 - pad || y > by1 + pad) return false;
   if (p.length === 3) return Math.hypot(p[0] - x, p[1] - y) <= pad;
   for (let i = 0; i + 5 < p.length; i += 3) {
     // быстрая отбраковка по прямоугольнику отрезка
@@ -95,6 +146,13 @@ export function hitStroke(s: Stroke, x: number, y: number, r: number): boolean {
     if (distToSegment(x, y, p[i], p[i + 1], p[i + 3], p[i + 4]) <= pad) return true;
   }
   return false;
+}
+
+/** Пипетка: верхний штрих под точкой (сначала ручка, потом маркер — он рисуется ниже). */
+export function strokeAt(strokes: Stroke[], x: number, y: number, r = 6): Stroke | null {
+  for (let i = strokes.length - 1; i >= 0; i--) if (strokes[i].tool !== 'marker' && hitStroke(strokes[i], x, y, r)) return strokes[i];
+  for (let i = strokes.length - 1; i >= 0; i--) if (strokes[i].tool === 'marker' && hitStroke(strokes[i], x, y, r)) return strokes[i];
+  return null;
 }
 
 export function strokesBottom(strokes: Stroke[]): number {
@@ -192,4 +250,28 @@ export function recolorStrokes(strokes: Stroke[], ids: string[], color: string, 
     return { ...s, id, color };
   });
   return { strokes: next, ids: out };
+}
+
+/**
+ * Масштабирует выбранные штрихи относительно точки (ox, oy) с одинаковым коэффициентом
+ * по осям (пропорции рисунка не искажаются); толщина линии меняется так же.
+ */
+export function scaleStrokes(strokes: Stroke[], ids: string[], ox: number, oy: number, k: number, newId: () => string): { strokes: Stroke[]; ids: string[] } {
+  const set = new Set(ids);
+  const out: string[] = [];
+  const next = strokes.map((s) => {
+    if (!set.has(s.id)) return s;
+    const id = newId();
+    out.push(id);
+    const points = s.points.map((v, i) => (i % 3 === 0 ? ox + (v - ox) * k : i % 3 === 1 ? oy + (v - oy) * k : v)).map((v) => Math.round(v * 100) / 100);
+    return { ...s, id, size: Math.max(0.5, Math.round(s.size * k * 100) / 100), points };
+  });
+  return { strokes: next, ids: out };
+}
+
+/** Коэффициент масштаба при перетаскивании угла рамки на (dx, dy). Не меньше 0.1. */
+export function scaleFactor(box: BBox, dx: number, dy: number): number {
+  const kx = (box.w + dx) / Math.max(1, box.w);
+  const ky = (box.h + dy) / Math.max(1, box.h);
+  return Math.max(0.1, Math.min(10, Math.abs(kx - 1) > Math.abs(ky - 1) ? kx : ky));
 }

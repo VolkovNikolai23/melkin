@@ -91,10 +91,24 @@ export class MelkinDB extends Dexie {
         await tx.table('cards').toCollection().modify((c: CardRow) => Object.assign(c, migrateCardToLadder(c)));
         await tx.table('meta').put({ key: 'resyncCards', value: true });
       });
+    // v5: тетради — индекс [docId+order], чтобы список страниц читался без самих штрихов
+    // (у больших тетрадей это мегабайты). Новые поля листа (бумага, объекты) необязательные.
+    this.version(5).stores({
+      docs: 'id, parentId, type, updatedAt, dailyDate, deletedAt',
+      blocks: 'id, docId, parentId, updatedAt, *tags, *links, portalOf',
+      pages: 'id, docId, [docId+order]',
+      files: 'id, kind',
+      annotations: 'id, docId, [docId+page], blockId',
+      cards: 'id, blockId, docId, due, state',
+      reviewLogs: 'id, cardId, review',
+      tests: 'id, docId, updatedAt',
+      testAttempts: 'id, testId, docId, at',
+      meta: 'key',
+    });
   }
 }
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const db = new MelkinDB();
 
