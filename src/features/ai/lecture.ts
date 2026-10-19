@@ -188,7 +188,7 @@ interface RawSummary {
 
 export type SummaryMode = 'short' | 'detailed';
 
-async function pageImages(slidesDoc: Doc | undefined, pages: number[], max: number): Promise<{ parts: Part[]; rendered: Map<number, Blob> }> {
+export async function pageImages(slidesDoc: Doc | undefined, pages: number[], max: number): Promise<{ parts: Part[]; rendered: Map<number, Blob> }> {
   const parts: Part[] = [];
   const rendered = new Map<number, Blob>();
   if (!slidesDoc?.fileId || !pages.length) return { parts, rendered };

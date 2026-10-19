@@ -80,7 +80,8 @@ export async function cleanupFiles(fileIds: string[]) {
     const used = await db.blocks.filter((b) => b.image?.fileId === id || b.pdfRef?.fileId === id).count();
     const usedByDoc = await db.docs.filter((d) => d.fileId === id || d.source?.fileId === id).count();
     const usedByPage = await db.pages.filter((p) => !!p.items?.some((i) => i.fileId === id)).count();
-    if (!used && !usedByDoc && !usedByPage) {
+    const usedByTest = await db.tests.filter((t) => t.questions.some((q) => (q.data as { fileId?: string })?.fileId === id)).count();
+    if (!used && !usedByDoc && !usedByPage && !usedByTest) {
       await db.files.delete(id);
       await db.meta.delete('pdftext:' + id);
     }

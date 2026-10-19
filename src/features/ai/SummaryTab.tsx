@@ -82,7 +82,7 @@ function OutlineEditor({ value, onChange }: { value: Outline; onChange: (o: Outl
 const KIND_LABEL: Record<DraftCard['kind'], string> = { term: 'Термин ↔ определение', qa: 'Вопрос → ответ', cloze: 'Пропуск {{…}}', list: 'Перечисление' };
 
 /** Экран одобрения карточек: оставить, изменить, удалить. */
-function CardApproval({ title, cards: initial, onCancel, onAdd }: { title: string; cards: DraftCard[]; onCancel: () => void; onAdd: (c: DraftCard[]) => Promise<void> }) {
+export function CardApproval({ title, cards: initial, onCancel, onAdd }: { title: string; cards: DraftCard[]; onCancel: () => void; onAdd: (c: DraftCard[]) => Promise<void> }) {
   const [cards, setCards] = useState(initial.map((c) => ({ ...c, keep: true, id: uid() })));
   const [busy, setBusy] = useState(false);
   const kept = cards.filter((c) => c.keep);

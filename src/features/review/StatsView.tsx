@@ -8,6 +8,7 @@ import { plural } from '../../lib/time';
 import { docIcon } from '../notes/docIcons';
 import { collectSubtree, sortDocs } from '../notes/docs';
 import { Rating } from './scheduler';
+import { combineKnowledge, latestScores } from '../tests/model';
 import { knowledgeOf, readiness, reviewsPerDay, SOLID_STEP, streakDays } from './stats';
 
 const dayLabel = (t: number) => new Date(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
@@ -102,7 +103,7 @@ function KnowledgeRow({ doc, depth, percent, total }: { doc: Doc; depth: number;
 export function StatsView() {
   const data = useLiveQuery(async () => {
     const now = Date.now();
-    const [logs, allCards, docs] = await Promise.all([db.reviewLogs.toArray(), db.cards.toArray(), db.docs.filter((d) => !d.deletedAt).toArray()]);
+    const [logs, allCards, docs, attempts] = await Promise.all([db.reviewLogs.toArray(), db.cards.toArray(), db.docs.filter((d) => !d.deletedAt).toArray(), db.testAttempts.toArray()]);
     const live = new Set(docs.map((d) => d.id));
     const cards = allCards.filter((c) => live.has(c.docId));
     const times = logs.map((l) => l.review);
@@ -113,8 +114,10 @@ export function StatsView() {
       for (const d of docs.filter((x) => x.parentId === parentId && (x.type === 'folder' || x.type === 'lecture')).sort(sortDocs)) {
         const ids = new Set(collectSubtree(docs, d.id));
         const k = knowledgeOf(cards.filter((c) => ids.has(c.docId)), now);
-        if (!k.total) continue;
-        rows.push({ doc: d, depth, percent: k.percent, total: k.total });
+        // тесты (последние попытки) тоже входят в процент знания
+        const tests = latestScores(attempts.filter((a) => ids.has(a.docId)));
+        if (!k.total && !tests.length) continue;
+        rows.push({ doc: d, depth, percent: combineKnowledge(k.percent, k.total, tests), total: k.total + tests.length });
         if (d.type === 'folder') walk(d.id, depth + 1);
       }
     };

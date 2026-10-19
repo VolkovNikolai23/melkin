@@ -273,13 +273,16 @@ export interface ReviewLogRow {
 
 export type TestQuestionKind = 'single' | 'multiple' | 'truefalse' | 'open' | 'match' | 'label' | 'order';
 
-/** Тест по подтеме или всей теме (наполняется на этапе 6). */
+/** Тест по подтеме, лекции или всей теме. */
 export interface TestRow {
   id: string;
   /** Документ (лекция или тема), к которому относится тест */
   docId: string;
   title: string;
-  questions: { id: string; kind: TestQuestionKind; prompt: string; data: unknown }[];
+  /** Откуда вопросы: ИИ по материалу (подтема или вся лекция) или карточки */
+  source?: 'ai' | 'cards';
+  subId?: string;
+  questions: { id: string; kind: TestQuestionKind; prompt: string; data: unknown; explanation?: string }[];
   createdAt: number;
   updatedAt: number;
 }
@@ -289,8 +292,9 @@ export interface TestAttempt {
   testId: string;
   docId: string;
   at: number;
+  /** Доля набранных баллов 0…1 */
   score: number;
-  answers: { questionId: string; correct: boolean; answer: unknown }[];
+  answers: { questionId: string; correct: boolean; score?: number; answer: unknown; feedback?: string }[];
 }
 
 export interface MetaRow {

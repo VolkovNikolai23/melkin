@@ -8,10 +8,12 @@ import { navigate, useRoute } from '../../lib/router';
 import { plural } from '../../lib/time';
 import { NotebookView } from '../ink/NotebookView';
 import { SummaryTab } from '../ai/SummaryTab';
+import { TestsTab } from '../tests/TestsTab';
 import { importSlides, SLIDES_ACCEPT } from '../pdf/importSlides';
 import { showBusy } from '../../components/busy';
 import { dialog } from '../../components/dialog';
 import { knowledgeOf } from '../review/stats';
+import { combineKnowledge, latestScores } from '../tests/model';
 import { docIcon } from './docIcons';
 import { collectSubtree, createDoc, sortDocs } from './docs';
 import { pickFiles } from './images';
@@ -32,21 +34,13 @@ export function useKnowledge(rootId: string) {
     const docs = await db.docs.filter((d) => !d.deletedAt).toArray();
     const ids = collectSubtree(docs, rootId);
     const cards = await db.cards.where('docId').anyOf(ids).toArray();
-    return knowledgeOf(cards, Date.now());
+    const k = knowledgeOf(cards, Date.now());
+    // результаты тестов (последняя попытка каждого) тоже влияют на процент знания
+    const tests = latestScores(await db.testAttempts.where('docId').anyOf(ids).toArray());
+    return { ...k, cardPercent: k.percent, percent: combineKnowledge(k.percent, k.total, tests), tests: tests.length, testPercent: tests.length ? Math.round((tests.reduce((s, x) => s + x, 0) / tests.length) * 100) : null };
   }, [rootId]);
 }
 
-function Placeholder({ icon, title, text }: { icon: 'sparkle' | 'check'; title: string; text: string }) {
-  return (
-    <div className="empty-state">
-      <div className="empty-icon">
-        <Icon name={icon} size={36} />
-      </div>
-      <h3>{title}</h3>
-      <p className="muted">{text}</p>
-    </div>
-  );
-}
 
 function NotesTab({ lecture }: { lecture: Doc }) {
   const notebook = useLiveQuery(() => (lecture.lecture?.notebookId ? db.docs.get(lecture.lecture.notebookId) : undefined), [lecture.lecture?.notebookId]);
@@ -118,6 +112,11 @@ function KnowledgeTab({ lecture }: { lecture: Doc }) {
       ) : (
         <p className="muted">В этой лекции пока нет карточек.</p>
       )}
+      {k.testPercent !== null && (
+        <p className="muted">
+          Тесты: {k.testPercent}% (последние попытки, {k.tests} {plural(k.tests, 'тест', 'теста', 'тестов')}){k.total ? ` · карточки: ${k.cardPercent}% · в итоге карточки весят 70%, тесты 30%` : ''}
+        </p>
+      )}
       {k.total > 0 && (
         <button className="btn primary" onClick={() => navigate(`review?scope=folder:${lecture.id}`)}>
           <Icon name="cards" /> Повторить лекцию
@@ -155,7 +154,7 @@ export function LecturePage({ lecture }: { lecture: Doc }) {
           >
             <Icon name={t.icon} size={18} />
             {t.label}
-            {t.id === 'knowledge' && knowledge && knowledge.total > 0 && <span className="tab-pill">{knowledge.percent}%</span>}
+            {t.id === 'knowledge' && knowledge && (knowledge.total > 0 || knowledge.tests > 0) && <span className="tab-pill">{knowledge.percent}%</span>}
           </button>
         ))}
         {(others ?? []).sort(sortDocs).map((d) => (
@@ -167,7 +166,11 @@ export function LecturePage({ lecture }: { lecture: Doc }) {
       <div className="lecture-body">
         {tab === 'notes' && <NotesTab lecture={lecture} />}
         {tab === 'summary' && <SummaryTab lecture={lecture} />}
-        {tab === 'tests' && <Placeholder icon="check" title="Тесты появятся позже" text="Тесты по подтемам и по всей теме: 7 типов вопросов, разбор ошибок, ошибки станут карточками." />}
+        {tab === 'tests' && (
+          <div className="page-pad">
+            <TestsTab doc={lecture} />
+          </div>
+        )}
         {tab === 'knowledge' && <KnowledgeTab lecture={lecture} />}
       </div>
     </div>

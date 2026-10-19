@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { DialogHost } from './components/dialog';
 import { AiAnswerHost } from './features/ai/AiAnswer';
 import { AskDialogHost } from './features/ai/AskDialog';
+import { TestRunner } from './features/tests/TestRunner';
 import { PwaBanners } from './components/pwa';
 import { Home } from './components/Home';
 import { Icon } from './components/Icon';
@@ -75,10 +76,11 @@ export function App() {
   else if (name === 'search') view = <SearchView initial={route.query.get('q') ?? ''} />;
   else if (name === 'settings') view = <SettingsView />;
   else if (name === 'trash') view = <TrashView />;
+  else if (name === 'test' && id) view = <TestRunner key={id} id={id} />;
   else view = <Home />;
 
   // во время сессии повторения боковая панель скрыта, на экране выбора очереди — видна
-  const inReview = name === 'review' && !!route.query.get('scope');
+  const inReview = (name === 'review' && !!route.query.get('scope')) || name === 'test';
 
   return (
     <div className={'app' + (open ? ' sidebar-open' : '') + (narrow ? ' narrow' : '')}>

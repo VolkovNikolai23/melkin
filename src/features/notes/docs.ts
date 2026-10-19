@@ -142,18 +142,22 @@ export async function emptyTrash() {
 /** Удалить насовсем (с блоками, карточками, страницами, аннотациями и файлами). */
 export async function purgeDoc(id: string) {
   let fileIds: string[] = [];
-  await db.transaction('rw', [db.docs, db.blocks, db.pages, db.cards, db.annotations], async () => {
+  await db.transaction('rw', [db.docs, db.blocks, db.pages, db.cards, db.annotations, db.tests, db.testAttempts], async () => {
     const all = await db.docs.toArray();
     const ids = collectSubtree(all, id);
     const blocks = await db.blocks.where('docId').anyOf(ids).toArray();
     const pages = await db.pages.where('docId').anyOf(ids).toArray();
+    const tests = await db.tests.where('docId').anyOf(ids).toArray();
     // файлы PDF и картинок этих документов — удалим, если больше нигде не используются
     fileIds = [
       ...all.filter((d) => ids.includes(d.id) && d.fileId).map((d) => d.fileId!),
       ...all.filter((d) => ids.includes(d.id) && d.source?.fileId).map((d) => d.source!.fileId!),
       ...blocks.flatMap((b) => (b.image?.fileId ? [b.image.fileId] : [])),
       ...pages.flatMap((p) => (p.items ?? []).flatMap((i) => (i.fileId ? [i.fileId] : []))),
+      ...tests.flatMap((t) => t.questions.flatMap((q) => ((q.data as { fileId?: string })?.fileId ? [(q.data as { fileId: string }).fileId] : []))),
     ];
+    await db.tests.where('docId').anyOf(ids).delete();
+    await db.testAttempts.where('docId').anyOf(ids).delete();
     await db.blocks.where('docId').anyOf(ids).delete();
     await db.pages.where('docId').anyOf(ids).delete();
     await db.cards.where('docId').anyOf(ids).delete();

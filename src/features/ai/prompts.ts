@@ -12,8 +12,9 @@ import recognize from './prompts/recognize.md?raw';
 import simpler from './prompts/simpler.md?raw';
 import summary from './prompts/summary.md?raw';
 import translate from './prompts/translate.md?raw';
+import tests from './prompts/tests.md?raw';
 
-const FILES = { ask, cards, check, explain, occlusion, outline, recognize, simpler, summary, translate };
+const FILES = { ask, cards, check, explain, occlusion, outline, recognize, simpler, summary, tests, translate };
 export type PromptName = keyof typeof FILES;
 
 /** Подставляет {{имя}}; неизвестные {{…}} (например, клоз {{46}} в примере) не трогает. */

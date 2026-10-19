@@ -117,8 +117,12 @@ export function ScanDialog({ file, onDone, onCancel }: { file: File; onDone: (bl
                 vectorEffect="non-scaling-stroke"
                 onPointerDown={(e) => {
                   e.preventDefault();
-                  (e.target as Element).setPointerCapture?.(e.pointerId);
                   dragIdx.current = i;
+                  try {
+                    (e.target as Element).setPointerCapture(e.pointerId);
+                  } catch {
+                    /* указатель уже отпущен */
+                  }
                 }}
               />
             ))}

@@ -8,6 +8,7 @@ import { NotebookView } from '../ink/NotebookView';
 import { dialog } from '../../components/dialog';
 import { openSplit } from '../../lib/splitStore';
 import { openAsk } from '../ai/AskDialog';
+import { TestsTab } from '../tests/TestsTab';
 import { Backlinks } from '../links/LinkViews';
 import { docIcon } from './docIcons';
 import { createDoc, createFolder, docLabel, renameDoc, restoreDoc, sortDocs } from './docs';
@@ -79,9 +80,11 @@ function FolderView({ doc }: { doc: Doc }) {
   };
   return (
     <div className="folder-view">
-      {knowledge && knowledge.total > 0 && (
+      {knowledge && (knowledge.total > 0 || knowledge.tests > 0) && (
         <p className="muted">
-          Знание {doc.role === 'subject' ? 'предмета' : doc.role === 'topic' ? 'темы' : 'папки'}: <strong>{knowledge.percent}%</strong> · выучено {knowledge.known} из {knowledge.total}
+          Знание {doc.role === 'subject' ? 'предмета' : doc.role === 'topic' ? 'темы' : 'папки'}: <strong>{knowledge.percent}%</strong>
+          {knowledge.total > 0 && ` · выучено ${knowledge.known} из ${knowledge.total}`}
+          {knowledge.testPercent !== null && ` · тесты ${knowledge.testPercent}%`}
         </p>
       )}
       <div className="doc-list">
@@ -111,6 +114,11 @@ function FolderView({ doc }: { doc: Doc }) {
           <Icon name="notebook" /> Тетрадь
         </button>
       </div>
+      {(doc.role === 'topic' || doc.role === 'subject') && (
+        <div className="folder-tests">
+          <TestsTab doc={doc} />
+        </div>
+      )}
     </div>
   );
 }
