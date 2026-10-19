@@ -21,9 +21,13 @@ import { CardsPanel } from '../cards/CardsPanel';
 import { OutlinerContext, useOutliner, type EditorAction, type OutlinerCtx } from './outlinerContext';
 import { OutlinerStore, useBlockSlice, useStoreValue } from './outlinerStore';
 import { HIGHLIGHT_COLORS, renderText } from './render';
+import { markTerms, termsToHtml } from '../glossary/glossary';
+import { useTermIndex } from '../glossary/GlossaryHost';
 
 const RenderedText = memo(function RenderedText({ text }: { text: string }) {
-  const html = useMemo(() => renderText(text), [text]);
+  // термины из словаря подчёркнуты: нажатие показывает определение
+  const terms = useTermIndex();
+  const html = useMemo(() => termsToHtml(renderText(markTerms(text, terms))), [text, terms]);
   // пустая строка не должна выглядеть как «ничего» — подсказываем, что сюда можно писать
   if (!text.trim()) return <span className="placeholder">Нажмите, чтобы писать (вопрос &gt;&gt; ответ — карточка)</span>;
   return <span dangerouslySetInnerHTML={{ __html: html }} />;

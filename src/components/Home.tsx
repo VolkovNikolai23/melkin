@@ -1,7 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
 import { db } from '../db/db';
-import { BACKUP_REMIND_DAYS, getLastBackup } from '../db/backup';
 import type { Doc } from '../db/schema';
 import { getOrCreateDaily } from '../features/notes/daily';
 import { docIcon } from '../features/notes/docIcons';
@@ -15,21 +14,6 @@ import { Icon } from './Icon';
 import { useDueCount } from './useDue';
 import { StorageWarning } from './storage';
 
-export function BackupReminder() {
-  const info = useLiveQuery(async () => ({ last: await getLastBackup(), docs: await db.docs.count() }), []);
-  if (!info || info.docs === 0) return null;
-  const days = info.last ? Math.floor((Date.now() - info.last) / 86400000) : null;
-  if (days !== null && days < BACKUP_REMIND_DAYS) return null;
-  return (
-    <div className="banner">
-      <Icon name="download" />
-      <span>{days === null ? 'Вы ещё ни разу не сохраняли резервную копию.' : `Последняя копия была ${days} ${plural(days, 'день', 'дня', 'дней')} назад.`}</span>
-      <button className="btn small primary" onClick={() => navigate('settings')}>
-        Сохранить копию
-      </button>
-    </div>
-  );
-}
 
 function StreakCard() {
   const s = useLiveQuery(async () => streakDays((await db.reviewLogs.toArray()).map((l) => l.review), Date.now()), []);
@@ -128,7 +112,6 @@ export function Home() {
           <h1>Сегодня</h1>
         </header>
         <StorageWarning />
-        <BackupReminder />
         {daily && <Outliner docId={daily.id} highlight={null} />}
       </div>
       <aside className="today-side">

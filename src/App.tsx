@@ -2,8 +2,13 @@ import { useEffect, useState } from 'react';
 import { DialogHost } from './components/dialog';
 import { AiAnswerHost } from './features/ai/AiAnswer';
 import { AskDialogHost } from './features/ai/AskDialog';
+import { GlossaryHost } from './features/glossary/GlossaryHost';
+import { ZhSelectHost } from './features/zh/ZhSelectHost';
+import { GlossaryView } from './features/glossary/GlossaryView';
 import { TestRunner } from './features/tests/TestRunner';
 import { PwaBanners } from './components/pwa';
+import { DailyBackupBanner } from './components/backupBanner';
+import { OpenReminder } from './components/reminder';
 import { Home } from './components/Home';
 import { Icon } from './components/Icon';
 import { SettingsView } from './components/SettingsView';
@@ -77,6 +82,7 @@ export function App() {
   else if (name === 'settings') view = <SettingsView />;
   else if (name === 'trash') view = <TrashView />;
   else if (name === 'test' && id) view = <TestRunner key={id} id={id} />;
+  else if (name === 'glossary') view = <GlossaryView initial={route.query.get('q') ?? ''} />;
   else view = <Home />;
 
   // во время сессии повторения боковая панель скрыта, на экране выбора очереди — видна
@@ -118,10 +124,16 @@ export function App() {
         )}
       </main>
       <PwaBanners />
+      <div className="top-banners">
+        <DailyBackupBanner />
+        <OpenReminder due={due?.total ?? 0} hidden={inReview || name === 'review'} />
+      </div>
       <IconPickerHost />
       <DialogHost />
       <AiAnswerHost />
       <AskDialogHost />
+      <GlossaryHost />
+      <ZhSelectHost />
     </div>
   );
 }

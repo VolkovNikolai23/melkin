@@ -3,7 +3,7 @@ import { resyncAllCards } from '../features/cards/sync';
 import { AI_KEYS_META, db, getMeta, SCHEMA_VERSION, setMeta, TABLES, type TableName } from './db';
 import { migrateBlockV1, migrateCardIdV1, migrateCardV1 } from './migrations';
 import { migrateCardToLadder } from '../features/review/ladder';
-import type { CardRow, FileRow, ReviewLogRow } from './schema';
+import type { GlossaryEntry, CardRow, FileRow, ReviewLogRow } from './schema';
 
 export const BACKUP_FORMAT = 'melkin-backup';
 export const BACKUP_REMIND_DAYS = 7;
@@ -23,9 +23,21 @@ export interface Backup extends BackupData {
   blobs: Map<string, Blob>;
 }
 
-export function backupFileName(d = new Date()) {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `melkin-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.zip`;
+/**
+ * Имя копии постоянное: в iCloud Drive новая копия заменяет старую (iOS один раз спросит
+ * «Заменить?»). Дата копии хранится внутри файла.
+ */
+export const BACKUP_FILE_NAME = 'Мелькин-копия.zip';
+export function backupFileName() {
+  return BACKUP_FILE_NAME;
+}
+
+/** Есть ли изменения после последней копии (чтобы не предлагать копию зря). */
+export async function changedSinceBackup(): Promise<boolean> {
+  const last = await getLastBackup();
+  if (!last) return (await db.docs.count()) > 0;
+  const [doc, block, log] = await Promise.all([db.docs.orderBy('updatedAt').last(), db.blocks.orderBy('updatedAt').last(), db.reviewLogs.orderBy('review').last()]);
+  return Math.max(doc?.updatedAt ?? 0, block?.updatedAt ?? 0, log?.review ?? 0) > last;
 }
 
 /** Собирает .zip: data.json + files/<id> (картинки и PDF кладём без сжатия — они и так сжаты). */
@@ -169,6 +181,12 @@ export async function importBackup(b: Backup, mode: 'replace' | 'merge') {
     await db.cards.bulkPut(cards.map((c, i) => (exCards[i] && (exCards[i]!.last_review ?? 0) > (c.last_review ?? 0) ? exCards[i]! : c)));
     await db.reviewLogs.bulkPut(get<ReviewLogRow>('reviewLogs'));
     await db.testAttempts.bulkPut(get('testAttempts'));
+    // словарь терминов: один термин — одна запись (по ключу), остаётся более свежая
+    for (const g of get<GlossaryEntry>('glossary')) {
+      const ex = await db.glossary.where('key').equals(g.key).first();
+      if (!ex) await db.glossary.put(g);
+      else if (g.updatedAt > ex.updatedAt) await db.glossary.put({ ...g, id: ex.id });
+    }
     // meta (настройки, дата копии) берём только если своих нет
     for (const m of get<{ key: string; value: unknown }>('meta')) {
       if (!(await db.meta.get(m.key))) await db.meta.put(m);

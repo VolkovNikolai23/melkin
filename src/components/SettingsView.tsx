@@ -4,6 +4,7 @@ import { AI_KEYS_META, db, getMeta, getSettings, saveSettings, setMeta } from '.
 import type { AiProviderId, FontSetting, ThemeSetting } from '../db/schema';
 import { FONTS, THEMES } from '../lib/appearance';
 import { formatBytes, storageLevel } from './storage';
+import { PushSettings } from '../features/push/PushSettings';
 import { deliverFile, getLastBackup, importBackup, makeBackupFile, markBackupDone, readBackup } from '../db/backup';
 import { formatDate } from '../lib/time';
 import { dialog } from './dialog';
@@ -171,6 +172,7 @@ export function SettingsView() {
 
       <AppearanceSettings />
       <AiSettings />
+      <PushSettings />
 
       <section className="panel">
         <h2>Резервная копия</h2>

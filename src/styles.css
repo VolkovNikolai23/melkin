@@ -4099,3 +4099,188 @@ button.card-badge {
 .t-feedback {
   color: var(--muted);
 }
+.top-banners {
+  position: fixed;
+  z-index: 150;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(12px + var(--safe-top, 0px));
+  width: min(560px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.top-banners .pwa-banner {
+  position: static;
+  transform: none;
+  width: 100%;
+  pointer-events: auto;
+}
+
+/* ---------- Словарь терминов и китайский ---------- */
+.gl-term {
+  text-decoration: underline dotted var(--accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.gl-pop {
+  position: fixed;
+  z-index: 160;
+  width: min(340px, calc(100vw - 16px));
+  max-height: min(420px, calc(100vh - 24px));
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 12px 14px;
+  font-size: 15px;
+}
+.zh-pop {
+  width: min(360px, calc(100vw - 16px));
+}
+.gl-term-title {
+  font-weight: 800;
+  font-size: 17px;
+  margin-bottom: 4px;
+}
+.gl-def {
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+.gl-zh {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+.gl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.glossary .gl-search {
+  flex: 1;
+  min-width: 220px;
+}
+.gl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0 24px;
+}
+.gl-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+}
+.gl-item-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.gl-item-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+.gl-zh-inline {
+  font-size: 16px;
+}
+.gl-src {
+  margin-top: 2px;
+}
+.gl-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 2px solid var(--accent-soft);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 10px 0;
+}
+.gl-editor-row {
+  display: flex;
+  gap: 8px;
+}
+.gl-editor-row input {
+  flex: 1;
+  min-width: 0;
+}
+.zh-dict-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.zh-dict-row > div:first-child {
+  flex: 1;
+  min-width: 240px;
+}
+.zh-btn {
+  position: fixed;
+  z-index: 170;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 22px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+}
+.zh-src {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+.zh-words {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zh-hanzi {
+  font-size: 20px;
+}
+.zh-tc {
+  float: right;
+  font-size: 13px;
+  color: var(--accent);
+}
+.zh-ai p {
+  margin: 4px 0;
+}
+.push-settings code {
+  font-size: 13px;
+  word-break: break-all;
+}
+.push-keys {
+  margin-top: 12px;
+}
+.push-keys summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.push-keypair {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.push-keypair > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.push-keypair button {
+  align-self: flex-start;
+}

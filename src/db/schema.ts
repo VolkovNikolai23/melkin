@@ -317,6 +317,35 @@ export interface Settings {
   autoRecognize: boolean;
 }
 
+/** Словарь терминов: нажатие на термин в заметке → определение офлайн */
+export interface GlossaryEntry {
+  id: string;
+  /** Термин в нижнем регистре — для поиска и уникальности */
+  key: string;
+  term: string;
+  definition: string;
+  /** Перевод на китайский и пиньинь */
+  zh?: string;
+  pinyin?: string;
+  /** Лекция или документ, откуда термин */
+  docId?: string;
+  source: 'ai' | 'user';
+  updatedAt: number;
+}
+
+/** Китайско-русский/английский словарь (CC-CEDICT или импортированный DSL) */
+export interface ZhEntry {
+  id?: number;
+  /** Упрощённое написание */
+  w: string;
+  /** Традиционное */
+  t: string;
+  /** Пиньинь с тонами */
+  p: string;
+  d: string[];
+  src: 'cedict' | 'dsl';
+}
+
 /** Кэш ответов ИИ: одинаковый запрос не тратит лимит повторно */
 export interface AiCacheRow {
   key: string;

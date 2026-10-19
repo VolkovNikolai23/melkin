@@ -1,4 +1,5 @@
 import { db } from '../../db/db';
+import { syncSchedule } from '../push/push';
 import type { CardRow, Doc } from '../../db/schema';
 import { dayStart } from '../../lib/time';
 import { applyRating, type Grade } from './scheduler';
@@ -79,6 +80,8 @@ export async function answerCard(card: CardRow, rating: Grade, now = Date.now())
     await db.cards.put(updated);
     await db.reviewLogs.add(log);
   });
+  // расписание напоминаний изменилось — отправим серверу (с задержкой, пачкой)
+  syncSchedule();
   return { before: card, updated, logId: log.id, rating };
 }
 

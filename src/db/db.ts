@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { AiCacheRow, Annotation, Block, CardRow, Doc, FileRow, MetaRow, Page, ReviewLogRow, Settings, TestAttempt, TestRow } from './schema';
+import type { AiCacheRow, GlossaryEntry, ZhEntry, Annotation, Block, CardRow, Doc, FileRow, MetaRow, Page, ReviewLogRow, Settings, TestAttempt, TestRow } from './schema';
 import { DEFAULT_SETTINGS } from './schema';
 import { migrateBlockV1, migrateCardIdV1, migrateCardV1 } from './migrations';
 import { migrateCardToLadder } from '../features/review/ladder';
@@ -16,6 +16,8 @@ export class MelkinDB extends Dexie {
   reviewLogs!: EntityTable<ReviewLogRow, 'id'>;
   meta!: EntityTable<MetaRow, 'key'>;
   aiCache!: EntityTable<AiCacheRow, 'key'>;
+  glossary!: EntityTable<GlossaryEntry, 'id'>;
+  zh!: EntityTable<ZhEntry, 'id'>;
 
   constructor(name = 'melkin') {
     super(name);
@@ -120,14 +122,30 @@ export class MelkinDB extends Dexie {
       meta: 'key',
       aiCache: 'key, createdAt',
     });
+    // v7: словарь терминов (входит в копию) и китайский словарь (загружается заново, в копию не входит)
+    this.version(7).stores({
+      docs: 'id, parentId, type, updatedAt, dailyDate, deletedAt',
+      blocks: 'id, docId, parentId, updatedAt, *tags, *links, portalOf',
+      pages: 'id, docId, [docId+order]',
+      files: 'id, kind',
+      annotations: 'id, docId, [docId+page], blockId',
+      cards: 'id, blockId, docId, due, state',
+      reviewLogs: 'id, cardId, review',
+      tests: 'id, docId, updatedAt',
+      testAttempts: 'id, testId, docId, at',
+      meta: 'key',
+      aiCache: 'key, createdAt',
+      glossary: 'id, &key, docId',
+      zh: '++id, w, t, src',
+    });
   }
 }
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const db = new MelkinDB();
 
-export const TABLES = ['docs', 'blocks', 'pages', 'files', 'annotations', 'cards', 'reviewLogs', 'tests', 'testAttempts', 'meta'] as const;
+export const TABLES = ['docs', 'blocks', 'pages', 'files', 'annotations', 'cards', 'reviewLogs', 'tests', 'testAttempts', 'meta', 'glossary'] as const;
 export type TableName = (typeof TABLES)[number];
 
 export async function getMeta<T>(key: string, fallback: T): Promise<T> {

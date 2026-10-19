@@ -40,11 +40,13 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
+        // обработчик push-уведомлений (public/push-sw.js)
+        importScripts: ['push-sw.js'],
       },
     }),
   ],
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'worker/**/*.test.js'],
   },
 });

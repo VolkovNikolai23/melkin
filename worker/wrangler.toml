@@ -1,0 +1,13 @@
+# Необязательно: для развёртывания из терминала (npx wrangler deploy).
+# Проще — через сайт Cloudflare, см. docs/PUSH.md.
+name = "melkin-push"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+# id своего KV-хранилища впишите после его создания
+[[kv_namespaces]]
+binding = "SUBS"
+id = "ВСТАВЬТЕ_ID_KV"

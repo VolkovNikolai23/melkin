@@ -209,7 +209,7 @@ export function SummaryTab({ lecture }: { lecture: Doc }) {
       setApprove({ subId, title, cards });
     });
 
-  if (ready === false)
+  if (ready === false && !outline?.length)
     return (
       <div className="empty-state">
         <div className="empty-icon">
@@ -288,7 +288,7 @@ export function SummaryTab({ lecture }: { lecture: Doc }) {
                   Подробно, как конспект
                 </button>
               </div>
-              <button className="btn" disabled={!!status} onClick={doAll}>
+              <button className="btn" disabled={!!status || !ready} onClick={doAll}>
                 <Icon name="sparkle" /> Сводки для всех подтем
               </button>
               <button className="btn ghost" disabled={!!status} onClick={() => setDraft(outline)}>
@@ -296,6 +296,7 @@ export function SummaryTab({ lecture }: { lecture: Doc }) {
               </button>
             </div>
             {info}
+            {ready === false && <p className="muted small">Ключ ИИ не задан — новые сводки и карточки сделать нельзя, но всё готовое доступно. Ключ — в «Настройках».</p>}
             <div className="sub-list">
               {outline.map((t) => (
                 <div key={t.id} className="sub-topic">
@@ -306,10 +307,10 @@ export function SummaryTab({ lecture }: { lecture: Doc }) {
                         {s.title}
                         {!!s.pages?.length && <small className="muted"> · слайды {s.pages.join(', ')}</small>}
                       </span>
-                      <button className="btn small" disabled={!!status} onClick={() => doSummary(s.id)}>
+                      <button className="btn small" disabled={!!status || !ready} onClick={() => doSummary(s.id)}>
                         <Icon name="sparkle" size={16} /> Сводка
                       </button>
-                      <button className="btn small ghost" disabled={!!status} onClick={() => doCards(s.id, s.title)}>
+                      <button className="btn small ghost" disabled={!!status || !ready} onClick={() => doCards(s.id, s.title)}>
                         <Icon name="cards" size={16} /> Карточки
                       </button>
                     </div>

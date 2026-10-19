@@ -241,6 +241,9 @@ export function Sidebar({
         <button className={'nav-item' + (routeName === 'stats' ? ' active' : '')} onClick={() => nav('stats')}>
           <Icon name="star" /> Статистика
         </button>
+        <button className={'nav-item' + (routeName === 'glossary' ? ' active' : '')} onClick={() => nav('glossary')}>
+          <Icon name="book" /> Словарь
+        </button>
         <button className="nav-item" onClick={() => openAsk(null)}>
           <Icon name="sparkle" /> Спросить ИИ
         </button>

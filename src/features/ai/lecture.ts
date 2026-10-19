@@ -181,6 +181,7 @@ interface SummaryNode {
 
 interface RawSummary {
   blocks?: SummaryNode[];
+  terms?: { term?: string; definition?: string; zh?: string; pinyin?: string }[];
   slides?: { page?: number; caption?: string }[];
   web?: { query?: string; caption?: string }[];
   diagrams?: Diagram[];
@@ -266,6 +267,12 @@ export async function summarize(lecture: Doc, subId: string, mode: SummaryMode, 
   // сводка — перед карточками подтемы
   add(raw.blocks ?? [], head.id, -10000);
   await db.blocks.bulkAdd(out);
+
+  // термины подтемы — в словарь (нажатие на термин в заметке покажет определение)
+  const { upsertTerm } = await import('../glossary/glossary');
+  for (const t of (raw.terms ?? []).slice(0, 12)) {
+    if (t.term && t.definition) await upsertTerm({ term: sanitizeSummary(t.term), definition: sanitizeSummary(t.definition), zh: t.zh, pinyin: t.pinyin, docId: lecture.id }, 'ai');
+  }
 
   const warnings: string[] = [];
   let order = -5000;

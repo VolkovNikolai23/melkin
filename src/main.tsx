@@ -43,3 +43,10 @@ createRoot(document.getElementById('root')!).render(
 setTimeout(() => {
   import('./features/ai/recognize').then((m) => m.startAutoRecognize()).catch(() => undefined);
 }, 8000);
+// Напоминания: расписание повторений уходит на свой сервер при запуске и при сворачивании
+import('./features/push/push')
+  .then(({ syncSchedule }) => {
+    syncSchedule(10_000);
+    document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && syncSchedule(0));
+  })
+  .catch(() => undefined);
