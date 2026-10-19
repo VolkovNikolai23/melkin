@@ -8,7 +8,7 @@ import { dialog } from '../../components/dialog';
 import { db } from '../../db/db';
 import type { Doc, DocType, FolderRole } from '../../db/schema';
 import { navigate } from '../../lib/router';
-import { importSlides, SLIDES_ACCEPT } from '../pdf/importSlides';
+import { askScan, importSlides, SLIDES_ACCEPT } from '../pdf/importSlides';
 import { showBusy } from '../../components/busy';
 import { openAsk } from '../ai/AskDialog';
 import { badgeCount, sumDue, type DueCount } from '../review/scheduler';
@@ -28,9 +28,11 @@ async function create(type: DocType, parentId: string | null, role?: FolderRole)
     // PDF, PowerPoint или фото (несколько фото — одна «презентация»)
     const files = await pickFiles(SLIDES_ACCEPT, true);
     if (!files.length) return;
+    const opts = await askScan(files);
+    if (!opts) return;
     const busy = showBusy('Импортирую…');
     try {
-      const d = await importSlides(files, parentId);
+      const d = await importSlides(files, parentId, opts);
       if (d) navigate(`doc/${d.id}`);
     } catch (e) {
       dialog.alert('Не удалось импортировать', e instanceof Error ? e.message : String(e));

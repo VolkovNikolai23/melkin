@@ -109,6 +109,9 @@ function AppearanceSettings() {
           </button>
         ))}
       </div>
+      <label className="check-row">
+        <input type="checkbox" checked={settings.animations} onChange={(e) => saveSettings({ animations: e.target.checked })} /> Анимации, конфетти и поздравления
+      </label>
     </section>
   );
 }

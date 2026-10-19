@@ -9,7 +9,7 @@ import { db } from '../../db/db';
 import { markInkDirty } from '../ai/recognize';
 import type { Doc, PageBackground, PageItem, Stroke } from '../../db/schema';
 import { uid } from '../../lib/id';
-import { pickFiles, storeImage } from '../notes/images';
+import { pickCamera, pickFiles, storeImage } from '../notes/images';
 import { InkCanvas } from './InkCanvas';
 import { InkToolbar } from './InkToolbar';
 import { placeImage } from './items';
@@ -427,21 +427,4 @@ export function NotebookView({ doc, initialPage = null }: { doc: Doc; initialPag
       )}
     </div>
   );
-}
-
-/** Сразу камера (на iPad): capture="environment" — задняя камера. */
-function pickCamera(): Promise<File[]> {
-  return new Promise((resolve) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.setAttribute('capture', 'environment');
-    input.style.display = 'none';
-    input.onchange = () => {
-      resolve([...(input.files ?? [])]);
-      input.remove();
-    };
-    document.body.appendChild(input);
-    input.click();
-  });
 }

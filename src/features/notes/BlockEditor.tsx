@@ -18,7 +18,7 @@ import { syncBlockCards } from '../cards/sync';
 import { analyze } from '../../lib/markup';
 import { useOutliner, type Caret, type EditorAction } from './outlinerContext';
 import { createDoc } from './docs';
-import { insertImages, pickFiles } from './images';
+import { insertImages, pickCamera, pickFiles } from './images';
 import { SuggestPopup, useSuggestions, type SlashCommand } from './Suggest';
 import { BUILTIN_TEMPLATES, insertTemplate, listTemplates } from './templates';
 import { detectTrigger, type Trigger } from './trigger';
@@ -93,9 +93,10 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
 
   const runSlash = async (cmd: SlashCommand, start: number) => {
     // выбор файла должен начаться синхронно, внутри жеста пользователя (требование iPadOS)
-    const files = cmd === 'image' ? pickFiles('image/*') : cmd === 'pdf' ? pickFiles('application/pdf,.pdf', false) : null;
+    const files = cmd === 'image' ? pickFiles('image/*') : cmd === 'camera' ? pickCamera() : cmd === 'pdf' ? pickFiles('application/pdf,.pdf', false) : null;
     replaceRange(start, '');
     switch (cmd) {
+      case 'camera':
       case 'image': {
         const list = await files!;
         if (!list.length) return;

@@ -8,6 +8,8 @@ import { plural } from '../../lib/time';
 import { InkCanvas } from '../ink/InkCanvas';
 import { InkToolbar } from '../ink/InkToolbar';
 import { CardFace } from './CardFace';
+import { celebrateStreak } from './celebrate';
+import { cheer, confetti, floatHeart } from '../../lib/joy';
 import { showAiAnswer } from '../ai/AiAnswer';
 import { aiErrorText, aiReady } from '../ai/client';
 import { checkAnswer, explainSimpler, type Verdict } from '../ai/review';
@@ -144,7 +146,9 @@ export function ReviewView({ scopeStr, express = false }: { scopeStr: string | n
       setBusy(true);
       try {
         const t = Date.now();
+        if (g === Rating.Know) floatHeart(document.querySelector('.grade-yes'), express ? '' : 'знаю');
         const a = express ? await logExpress(current, g, t) : await answerCard(current, g, t);
+        if (!express) void celebrateStreak(t);
         setSteps((st) => [...st, { answer: a, session }]);
         const next = express ? afterExpressAnswer(session, current, g === Rating.Know, t) : afterAnswer(session, a.updated, t);
         // карточка, вернувшаяся в очередь, увеличивает общий объём сессии
@@ -187,6 +191,7 @@ export function ReviewView({ scopeStr, express = false }: { scopeStr: string | n
     try {
       const r = await checkAnswer(card, mine, { width: 800, height: 240 });
       setCheck((c) => (c ? { loading: false, ...r } : c));
+      if (r.verdict === 'correct') requestAnimationFrame(() => floatHeart(document.querySelector('.ai-check'), 'верно!'));
     } catch (e) {
       setCheck((c) => (c ? { loading: false, error: aiErrorText(e) } : c));
     }
@@ -299,6 +304,12 @@ export function ReviewView({ scopeStr, express = false }: { scopeStr: string | n
 function SessionDone({ steps, session, onUndo }: { steps: Step[]; session: Session; onUndo?: () => void }) {
   const known = steps.filter((s) => s.answer.rating === Rating.Know).length;
   const n = steps.length;
+  // праздник за законченное повторение (один раз при появлении экрана)
+  useEffect(() => {
+    if (!n) return;
+    confetti(n >= 20 ? 2 : 1);
+    if (known === n && n >= 5) cheer('Все ответы — «знаю»! ✨');
+  }, []); // только при появлении экрана
   const soon = session.due[0];
   return (
     <div className="review-done">

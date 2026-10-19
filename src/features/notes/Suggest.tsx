@@ -30,11 +30,13 @@ export type SlashCommand =
   | 'props'
   | 'math'
   | 'chem'
+  | 'camera'
   | 'card'
   | 'pdf';
 
 const SLASH: { cmd: SlashCommand; label: string; icon: IconName; kw: string }[] = [
   { cmd: 'image', label: 'Картинка', icon: 'image', kw: 'картинка фото изображение рисунок image photo' },
+  { cmd: 'camera', label: 'Фото с камеры', icon: 'camera', kw: 'камера фото снять сфотографировать camera доска' },
   { cmd: 'code', label: 'Блок кода', icon: 'code', kw: 'код программа code python c++ java matlab' },
   { cmd: 'draw', label: 'Рукописный блок', icon: 'pen', kw: 'рисунок рукописный pencil draw ink' },
   { cmd: 'portal', label: 'Портал (блок из другого места)', icon: 'portal', kw: 'портал portal вставить блок' },

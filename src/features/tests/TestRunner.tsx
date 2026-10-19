@@ -15,6 +15,7 @@ import { InkToolbar } from '../ink/InkToolbar';
 import { renderText } from '../notes/render';
 import { addMistakeCards, checkOpen, saveAttempt } from './data';
 import { startDrag } from './drag';
+import { cheer, confetti } from '../../lib/joy';
 import { answerText, correctText, emptyAnswer, grade, isAnswered, KIND_LABEL, mistakeCards, questionsOf, shuffle, type Answer, type Graded, type Question } from './model';
 
 const OPEN_W = 800;
@@ -417,6 +418,14 @@ export function TestRunner({ id }: { id: string }) {
     setResults(res);
     setAttempt(await saveAttempt(test, res.map((r, i) => ({ questionId: questions[i].id, correct: r.correct, score: r.pending ? 0 : r.score, answer: answers[i], feedback: r.feedback }))));
     setPhase('results');
+    const pct = res.reduce((s, r) => s + r.score, 0) / Math.max(1, res.length);
+    if (pct >= 0.999) {
+      confetti(2);
+      cheer('Идеально! Все ответы верны 🎉');
+    } else if (pct >= 0.8) {
+      confetti(1);
+      cheer('Отличный результат!');
+    }
   };
 
   const selfGrade = async (i: number, ok: boolean) => {

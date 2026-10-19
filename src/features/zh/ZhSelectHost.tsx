@@ -26,14 +26,23 @@ export function ZhSelectHost() {
       t = window.setTimeout(() => {
         const s = window.getSelection();
         const text = s?.toString().trim() ?? '';
-        if (!s || s.isCollapsed || !text || text.length > 300 || !hasHan(text)) return setSel(null);
+        if (!s || s.isCollapsed || !text || text.length > 300 || !hasHan(text) || !s.anchorNode?.isConnected) return setSel(null);
         const r = s.getRangeAt(0).getBoundingClientRect();
         if (!r.width && !r.height) return setSel(null);
         setSel({ text, rect: r });
       }, 250);
     };
+    // перешли на другой экран — выделение уже не актуально
+    const away = () => {
+      setSel(null);
+      setOpen(null);
+    };
     document.addEventListener('selectionchange', on);
-    return () => document.removeEventListener('selectionchange', on);
+    window.addEventListener('hashchange', away);
+    return () => {
+      document.removeEventListener('selectionchange', on);
+      window.removeEventListener('hashchange', away);
+    };
   }, []);
 
   useEffect(() => {

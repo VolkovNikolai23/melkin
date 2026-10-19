@@ -56,19 +56,43 @@ export async function importPptx(file: File, parentId: string | null): Promise<D
   return { ...doc, source };
 }
 
-/** Фото доски, слайдов или страниц → PDF, по странице на фото. */
-export async function photosToPdf(files: Blob[]): Promise<Uint8Array> {
+/**
+ * «Скан» фото: если на снимке нашёлся лист/доска/экран — выпрямляем перспективу,
+ * затем выравниваем фон до белого. Если края не нашлись — только улучшаем.
+ */
+async function scanCanvas(c: HTMLCanvasElement): Promise<HTMLCanvasElement> {
+  const { defaultQuad, detectQuad, enhance, outputSize, warp } = await import('../ink/scan');
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  const src = ctx.getImageData(0, 0, c.width, c.height);
+  let img: import('../ink/scan').Img = { data: src.data, width: c.width, height: c.height };
+  const q = detectQuad(img);
+  const found = JSON.stringify(q) !== JSON.stringify(defaultQuad(c.width, c.height));
+  if (found) {
+    const { width, height } = outputSize(q, 2000);
+    img = warp(img, q, width, height);
+  }
+  img = enhance(img, 'color');
+  const out = document.createElement('canvas');
+  out.width = img.width;
+  out.height = img.height;
+  out.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(img.data), img.width, img.height), 0, 0);
+  return out;
+}
+
+/** Фото доски, слайдов или страниц → PDF, по странице на фото (scan — выпрямить и улучшить). */
+export async function photosToPdf(files: Blob[], scan = false): Promise<Uint8Array> {
   const { PDFDocument } = await import('pdf-lib');
   const pdf = await PDFDocument.create();
   for (const f of files) {
     const bmp = await createImageBitmap(f);
     // 2000 px по длинной стороне — чётко на экране iPad, а файл не раздувается
     const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
-    const c = document.createElement('canvas');
+    let c = document.createElement('canvas');
     c.width = Math.round(bmp.width * k);
     c.height = Math.round(bmp.height * k);
     c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
     bmp.close();
+    if (scan) c = await scanCanvas(c);
     const jpg = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Не удалось прочитать фото'))), 'image/jpeg', 0.88));
     const img = await pdf.embedJpg(new Uint8Array(await jpg.arrayBuffer()));
     // ширина страницы — 720 пт, как у слайда 16:9 / 4:3
@@ -79,8 +103,8 @@ export async function photosToPdf(files: Blob[]): Promise<Uint8Array> {
   return pdf.save();
 }
 
-export async function importPhotos(files: File[], parentId: string | null, title = 'Фото'): Promise<Doc> {
-  const bytes = await photosToPdf(files);
+export async function importPhotos(files: File[], parentId: string | null, title = 'Фото', scan = false): Promise<Doc> {
+  const bytes = await photosToPdf(files, scan);
   const doc = await importPdf(new File([bytes as Uint8Array<ArrayBuffer>], title + '.pdf', { type: 'application/pdf' }), parentId);
   await db.docs.update(doc.id, { source: { kind: 'photos' } });
   return { ...doc, source: { kind: 'photos' } };
@@ -89,7 +113,7 @@ export async function importPhotos(files: File[], parentId: string | null, title
 export const isPptx = (f: File) => /\.pptx$/i.test(f.name) || f.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
 /** Импорт выбранных файлов: PDF, PPTX или фото (несколько фото — одна «презентация»). */
-export async function importSlides(files: File[], parentId: string | null): Promise<Doc | null> {
+export async function importSlides(files: File[], parentId: string | null, opts: { scan?: boolean } = {}): Promise<Doc | null> {
   if (!files.length) return null;
   const f = files[0];
   if (/\.ppt$/i.test(f.name) || f.type === 'application/vnd.ms-powerpoint') {
@@ -97,6 +121,18 @@ export async function importSlides(files: File[], parentId: string | null): Prom
   }
   if (isPptx(f)) return importPptx(f, parentId);
   const photos = files.filter((x) => x.type.startsWith('image/'));
-  if (photos.length) return importPhotos(photos, parentId, photos.length === 1 ? baseName(photos[0].name) : 'Фото');
+  if (photos.length) return importPhotos(photos, parentId, photos.length === 1 ? baseName(photos[0].name) : 'Фото', opts.scan);
   return importPdf(f, parentId);
+}
+
+/** Для фото спрашиваем, выпрямить ли их как скан (доска, слайды на экране, листы). */
+export async function askScan(files: File[]): Promise<{ scan: boolean } | null> {
+  if (!files.some((f) => f.type.startsWith('image/'))) return { scan: false };
+  const { dialog } = await import('../../components/dialog');
+  const c = await dialog.choose('Фото доски или слайдов', 'Выпрямить перспективу и выровнять фон до белого, как у сканера? Края найдутся сами.', [
+    { label: 'Выпрямить и улучшить', value: 'scan', primary: true },
+    { label: 'Оставить как есть', value: 'raw' },
+    { label: 'Отмена', value: 'cancel' },
+  ]);
+  return c === 'scan' ? { scan: true } : c === 'raw' ? { scan: false } : null;
 }

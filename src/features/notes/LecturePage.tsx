@@ -9,7 +9,7 @@ import { plural } from '../../lib/time';
 import { NotebookView } from '../ink/NotebookView';
 import { SummaryTab } from '../ai/SummaryTab';
 import { TestsTab } from '../tests/TestsTab';
-import { importSlides, SLIDES_ACCEPT } from '../pdf/importSlides';
+import { askScan, importSlides, SLIDES_ACCEPT } from '../pdf/importSlides';
 import { showBusy } from '../../components/busy';
 import { dialog } from '../../components/dialog';
 import { knowledgeOf } from '../review/stats';
@@ -53,9 +53,11 @@ function NotesTab({ lecture }: { lecture: Doc }) {
   const uploadSlides = async () => {
     const files = await pickFiles(SLIDES_ACCEPT, true);
     if (!files.length) return;
+    const opts = await askScan(files);
+    if (!opts) return;
     const done = showBusy('Импортирую презентацию…');
     try {
-      const d = await importSlides(files, lecture.id);
+      const d = await importSlides(files, lecture.id, opts);
       if (d) await db.docs.update(lecture.id, { lecture: { ...lecture.lecture, slidesId: d.id } });
     } catch (e) {
       dialog.alert('Не удалось импортировать', e instanceof Error ? e.message : String(e));

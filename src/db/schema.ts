@@ -315,6 +315,8 @@ export interface Settings {
   aiModel: { gemini: string; claude: string };
   /** Распознавать рукопись в фоне, когда есть сеть (для поиска и ИИ) */
   autoRecognize: boolean;
+  /** Анимации, конфетти и поздравления */
+  animations: boolean;
 }
 
 /** Словарь терминов: нажатие на термин в заметке → определение офлайн */
@@ -360,4 +362,5 @@ export const DEFAULT_SETTINGS: Settings = {
   aiProvider: 'gemini',
   aiModel: { gemini: 'gemini-flash-latest', claude: 'claude-opus-5-5' },
   autoRecognize: true,
+  animations: true,
 };

@@ -172,6 +172,35 @@ export async function createAiTest(lecture: Doc, subId?: string): Promise<TestRo
   return saveTest(lecture.id, found ? `Тест: ${found.sub.title}` : `Тест по лекции: ${lecture.title}`, questions, 'ai', subId);
 }
 
+/** Тест ИИ по всей теме (предмету): материал всех лекций внутри. */
+export async function createAiTopicTest(folder: Doc): Promise<TestRow> {
+  const docs = await db.docs.filter((d) => !d.deletedAt).toArray();
+  const ids = new Set(collectSubtree(docs, folder.id));
+  const lectures = docs.filter((d) => d.type === 'lecture' && ids.has(d.id));
+  if (!lectures.length) throw new Error('В теме пока нет лекций. Тест по теме строится по материалу её лекций.');
+  // каждой лекции — равная доля материала
+  const per = Math.floor(60000 / lectures.length);
+  const parts: string[] = [];
+  for (const l of lectures) {
+    const m = await lectureMaterial(l);
+    if (m.slides.some((x) => x.trim()) || m.notes.length) parts.push(`##### Лекция «${l.title}»\n${materialText(m, undefined, per)}`);
+  }
+  if (!parts.length) throw new Error('В лекциях темы пока нет материала: загрузите презентации или напишите конспекты.');
+  const raw = await askJson<{ questions?: RawQuestion[] }>(
+    {
+      system: prompt('tests', { scope: `вся тема «${folder.title}» (${lectures.length} ${lectures.length === 1 ? 'лекция' : 'лекций'}); вопросы по всем лекциям, особенно на связи между ними`, count: '15–20', subject: await subjectOf(folder) }),
+      parts: [{ text: parts.join('\n\n') }],
+      temperature: 0.5,
+      cache: false,
+    },
+    (v) => Array.isArray(v.questions) && v.questions.length > 0,
+  );
+  // картинок слайдов здесь нет — вопросы «подпишите» без изображения не берём
+  const questions = normalizeAiQuestions(raw, 0).questions.filter((q) => q.kind !== 'label');
+  if (questions.length < 3) throw new Error('ИИ прислал слишком мало вопросов. Попробуйте ещё раз.');
+  return saveTest(folder.id, `Тест по теме: ${folder.title}`, questions, 'ai');
+}
+
 // ---------- Открытые ответы ----------
 
 export async function checkOpen(q: Question, text: string, image?: Blob): Promise<CheckResult> {

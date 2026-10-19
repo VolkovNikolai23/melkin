@@ -74,6 +74,23 @@ export function pickFiles(accept: string, multiple = true): Promise<File[]> {
   });
 }
 
+/** Сразу камера (на iPad): capture="environment" — задняя камера. */
+export function pickCamera(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.setAttribute('capture', 'environment');
+    input.style.display = 'none';
+    input.onchange = () => {
+      resolve([...(input.files ?? [])]);
+      input.remove();
+    };
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
 /** Файлы, на которые больше не ссылается ни один блок, удаляем. */
 export async function cleanupFiles(fileIds: string[]) {
   for (const id of fileIds) {

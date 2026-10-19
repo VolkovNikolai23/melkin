@@ -1,3 +1,4 @@
+import { setJoy } from './joy';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect } from 'react';
 import { getSettings } from '../db/db';
@@ -25,8 +26,12 @@ export const THEMES: { id: ThemeSetting; label: string }[] = [
   { id: 'dark', label: 'Тёмная' },
 ];
 
-export function applyAppearance(theme: ThemeSetting, font: FontSetting) {
+export function applyAppearance(theme: ThemeSetting, font: FontSetting, animations = true) {
   const root = document.documentElement;
+  // без анимаций: и конфетти, и плавные переходы выключены
+  setJoy(animations);
+  if (animations) root.removeAttribute('data-motion');
+  else root.setAttribute('data-motion', 'off');
   if (theme === 'system') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', theme);
   root.style.setProperty('--app-font', (FONTS.find((f) => f.id === font) ?? FONTS[0]).css);
@@ -38,6 +43,6 @@ export function applyAppearance(theme: ThemeSetting, font: FontSetting) {
 export function useAppearance() {
   const s = useLiveQuery(getSettings, []);
   useEffect(() => {
-    if (s) applyAppearance(s.theme, s.font);
+    if (s) applyAppearance(s.theme, s.font, s.animations);
   }, [s]);
 }

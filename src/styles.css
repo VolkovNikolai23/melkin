@@ -4284,3 +4284,196 @@ button.card-badge {
 .push-keypair button {
   align-self: flex-start;
 }
+
+/* ================= Этап 8: мелкие радости и плавность ================= */
+.confetti-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 400;
+  pointer-events: none;
+}
+.cheer {
+  position: fixed;
+  z-index: 410;
+  left: 50%;
+  top: calc(18px + var(--safe-top, 0px));
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 800;
+  font-size: 17px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  animation: cheer-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.cheer.out {
+  animation: cheer-out 0.35s ease-in both;
+}
+@keyframes cheer-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -24px) scale(0.85);
+  }
+}
+@keyframes cheer-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -16px) scale(0.95);
+  }
+}
+.float-heart {
+  position: fixed;
+  z-index: 410;
+  transform: translateX(-50%);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 18px;
+  pointer-events: none;
+  animation: heart-up 0.9s ease-out forwards;
+}
+@keyframes heart-up {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -14px) scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -70px) scale(1);
+  }
+}
+
+/* плавное появление экранов (один раз при открытии — рисованию не мешает) */
+.main-scroll > *,
+.review-body,
+.t-body > *,
+.review-done {
+  animation: fade-up 0.22s ease-out both;
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+/* ответ карточки раскрывается */
+.card-back {
+  animation: reveal 0.28s ease-out both;
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+/* окна — мягко «выпрыгивают» */
+.modal,
+.palette-pop,
+.gl-pop,
+.lasso-menu,
+.menu {
+  animation: pop-in 0.18s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+.lasso-menu {
+  animation-name: pop-in-up;
+}
+@keyframes pop-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-100% - 2px)) scale(0.94);
+  }
+}
+.top-banners .pwa-banner {
+  animation: slide-down 0.3s ease-out both;
+}
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+/* кнопки чуть «нажимаются» */
+.btn:active:not(:disabled),
+.grade:active:not(:disabled),
+.t-option:active,
+.t-chip:active {
+  transform: scale(0.97);
+}
+.btn,
+.grade,
+.t-option {
+  transition:
+    transform 0.08s ease-out,
+    background-color 0.15s,
+    border-color 0.15s;
+}
+.grade.suggested {
+  animation: glow 1.4s ease-in-out infinite;
+}
+@keyframes glow {
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+}
+.ai-check.v-correct {
+  animation: bump 0.4s ease-out;
+}
+@keyframes bump {
+  40% {
+    transform: scale(1.03);
+  }
+}
+.streak.lit .streak-flame {
+  animation: flicker 2.4s ease-in-out infinite;
+}
+@keyframes flicker {
+  50% {
+    transform: scale(1.08) rotate(-3deg);
+  }
+}
+
+/* анимации выключены в настройках или в системе («Уменьшение движения») */
+:root[data-motion='off'] *,
+:root[data-motion='off'] *::before,
+:root[data-motion='off'] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .spinner {
+    animation-duration: 3s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+/* баннеры на узком экране: текст сверху, кнопки переносятся */
+.pwa-banner {
+  flex-wrap: wrap;
+}
+.pwa-banner > span {
+  flex: 1 1 220px;
+  min-width: 0;
+}

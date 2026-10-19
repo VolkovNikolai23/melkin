@@ -62,7 +62,7 @@ export function DailyBackupBanner() {
   return (
     <div className="pwa-banner backup-banner">
       <Icon name="download" />
-      <span>Сохраните копию на сегодня: «Поделиться» → «Сохранить в Файлы» → iCloud Drive. Файл тот же — новая копия заменит старую.</span>
+      <span>Сохраните копию на сегодня в iCloud Drive («Сохранить в Файлы») — новая заменит старую.</span>
       <button className="btn small primary" disabled={busy} onClick={save}>
         {file ? 'Сохранить копию' : 'Готовлю…'}
       </button>

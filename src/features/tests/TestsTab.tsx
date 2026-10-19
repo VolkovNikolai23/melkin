@@ -8,7 +8,7 @@ import { navigate } from '../../lib/router';
 import { formatDate, plural } from '../../lib/time';
 import { aiErrorText, aiReady } from '../ai/client';
 import { cleanupFiles } from '../notes/images';
-import { createAiTest, createCardTest } from './data';
+import { createAiTest, createAiTopicTest, createCardTest } from './data';
 
 /** Тесты лекции или темы: список с последним результатом и создание новых. */
 export function TestsTab({ doc }: { doc: Doc }) {
@@ -73,6 +73,11 @@ export function TestsTab({ doc }: { doc: Doc }) {
           <button className="btn primary" disabled={!!busy} onClick={() => make('Собираю тест из карточек…', () => createCardTest(doc))}>
             <Icon name="cards" /> Из карточек {doc.type === 'lecture' ? 'лекции' : 'темы'}
           </button>
+          {doc.type === 'folder' && (
+            <button className="btn" disabled={!!busy || !ready} onClick={() => make('ИИ составляет тест по теме…', async () => createAiTopicTest(await fresh()))}>
+              <Icon name="sparkle" /> ИИ: по всей {doc.role === 'subject' ? 'дисциплине' : 'теме'}
+            </button>
+          )}
           {doc.type === 'lecture' && (
             <>
               <button className="btn" disabled={!!busy || !ready} onClick={bySub}>
@@ -84,7 +89,7 @@ export function TestsTab({ doc }: { doc: Doc }) {
             </>
           )}
         </div>
-        {doc.type === 'lecture' && ready === false && <p className="muted small">Тесты от ИИ по материалу лекции появятся, когда вы добавите ключ ИИ в настройках. Тест из карточек работает и без него.</p>}
+        {ready === false && <p className="muted small">Тесты от ИИ по материалу появятся, когда вы добавите ключ ИИ в настройках. Тест из карточек работает и без него.</p>}
       </section>
 
       {data && data.length > 0 && (
