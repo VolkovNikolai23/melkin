@@ -78,8 +78,11 @@ export function pickFiles(accept: string, multiple = true): Promise<File[]> {
 export async function cleanupFiles(fileIds: string[]) {
   for (const id of fileIds) {
     const used = await db.blocks.filter((b) => b.image?.fileId === id || b.pdfRef?.fileId === id).count();
-    const usedByDoc = await db.docs.filter((d) => d.fileId === id).count();
+    const usedByDoc = await db.docs.filter((d) => d.fileId === id || d.source?.fileId === id).count();
     const usedByPage = await db.pages.filter((p) => !!p.items?.some((i) => i.fileId === id)).count();
-    if (!used && !usedByDoc && !usedByPage) await db.files.delete(id);
+    if (!used && !usedByDoc && !usedByPage) {
+      await db.files.delete(id);
+      await db.meta.delete('pdftext:' + id);
+    }
   }
 }

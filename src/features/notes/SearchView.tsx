@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon';
 import { db } from '../../db/db';
 import { navigate } from '../../lib/router';
 import { escapeForSnippet } from './render';
+import { searchPdfs } from '../pdf/textIndex';
 
 function snippet(text: string, q: string) {
   const i = text.toLowerCase().indexOf(q);
@@ -36,10 +37,27 @@ export function SearchView({ initial }: { initial: string }) {
       .toArray();
     // выделения в PDF тоже ищутся
     const annHits = await db.annotations.filter((a) => live(a.docId) && a.kind === 'highlight' && !!a.text && a.text.toLowerCase().includes(dq)).limit(50).toArray();
+    // листы тетрадей: текстовые блоки на листе и распознанный рукописный текст
+    const pageHits: { docId: string; page: number; text: string; title: string }[] = [];
+    await db.pages.each((p) => {
+      if (pageHits.length >= 50 || !live(p.docId)) return;
+      const texts = [...(p.items ?? []).map((i) => i.text ?? ''), p.recognizedText ?? ''];
+      const t = texts.find((x) => x.toLowerCase().includes(dq));
+      if (t) pageHits.push({ docId: p.docId, page: p.order, text: t, title: titles.get(p.docId) ?? '' });
+    });
+    // номер листа по порядку (order может идти с пропусками после удаления)
+    for (const h of pageHits) {
+      const orders = (await db.pages.where('docId').equals(h.docId).toArray()).map((p) => p.order).sort((a, b) => a - b);
+      h.page = orders.indexOf(h.page) + 1;
+    }
+    // полный текст PDF и презентаций
+    const pdfHits = await searchPdfs(dq, docs);
     return {
       docHits,
       blockHits: blockHits.map((b) => ({ b, title: titles.get(b.docId) ?? '' })),
       annHits: annHits.map((a) => ({ a, title: titles.get(a.docId) ?? '' })),
+      pageHits,
+      pdfHits,
     };
   }, [dq]);
 
@@ -51,7 +69,7 @@ export function SearchView({ initial }: { initial: string }) {
       </div>
       {res && (
         <div className="search-results">
-          {res.docHits.length === 0 && res.blockHits.length === 0 && res.annHits.length === 0 && <p className="muted">Ничего не найдено.</p>}
+          {res.docHits.length + res.blockHits.length + res.annHits.length + res.pageHits.length + res.pdfHits.length === 0 && <p className="muted">Ничего не найдено.</p>}
           {res.docHits.map((d) => (
             <button key={d.id} className="search-hit" onClick={() => navigate(`doc/${d.id}`)}>
               <strong>{d.title}</strong>
@@ -63,6 +81,22 @@ export function SearchView({ initial }: { initial: string }) {
               <span dangerouslySetInnerHTML={{ __html: snippet(a.text!, dq) }} />
               <small>
                 выделение в PDF · {title}, стр. {a.page}
+              </small>
+            </button>
+          ))}
+          {res.pageHits.map((h) => (
+            <button key={h.docId + ':' + h.page} className="search-hit" onClick={() => navigate(`doc/${h.docId}?page=${h.page}`)}>
+              <span dangerouslySetInnerHTML={{ __html: snippet(h.text, dq) }} />
+              <small>
+                тетрадь · {h.title}, лист {h.page}
+              </small>
+            </button>
+          ))}
+          {res.pdfHits.map((h) => (
+            <button key={h.docId + ':' + h.page} className="search-hit" onClick={() => navigate(`doc/${h.docId}?page=${h.page}`)}>
+              <span dangerouslySetInnerHTML={{ __html: snippet(h.text.replace(/\s+/g, ' '), dq) }} />
+              <small>
+                PDF · {h.title}, стр. {h.page}
               </small>
             </button>
           ))}

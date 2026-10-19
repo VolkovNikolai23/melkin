@@ -8,7 +8,8 @@ import { dialog } from '../../components/dialog';
 import { db } from '../../db/db';
 import type { Doc, DocType, FolderRole } from '../../db/schema';
 import { navigate } from '../../lib/router';
-import { importPdf } from '../pdf/annotations';
+import { importSlides, SLIDES_ACCEPT } from '../pdf/importSlides';
+import { showBusy } from '../../components/busy';
 import { badgeCount, sumDue, type DueCount } from '../review/scheduler';
 import { docIcon } from './docIcons';
 import { collectSubtree, createDoc, createFolder, isContainer, isLive, moveDoc, moveDocTo, renameDoc, shiftDoc, sortDocs, trashDoc } from './docs';
@@ -23,8 +24,18 @@ const NEW_TITLE: Record<string, string> = { subject: 'Название пред�
 /** Создать документ; папкам, предметам, темам и лекциям сразу спрашиваем название. */
 async function create(type: DocType, parentId: string | null, role?: FolderRole) {
   if (type === 'pdf') {
-    const [file] = await pickFiles('application/pdf,.pdf', false);
-    if (file) navigate(`doc/${(await importPdf(file, parentId)).id}`);
+    // PDF, PowerPoint или фото (несколько фото — одна «презентация»)
+    const files = await pickFiles(SLIDES_ACCEPT, true);
+    if (!files.length) return;
+    const busy = showBusy('Импортирую…');
+    try {
+      const d = await importSlides(files, parentId);
+      if (d) navigate(`doc/${d.id}`);
+    } catch (e) {
+      dialog.alert('Не удалось импортировать', e instanceof Error ? e.message : String(e));
+    } finally {
+      busy();
+    }
     return;
   }
   const askName = type === 'folder' || type === 'lecture';
@@ -58,12 +69,12 @@ function createItems(doc: Doc): MenuItem[] {
   if (doc.type === 'lecture')
     return [
       { label: 'Новая заметка', icon: 'note', onClick: () => create('note', id) },
-      { label: 'Импорт PDF / презентации', icon: 'pdf', onClick: () => create('pdf', id) },
+      { label: 'Импорт PDF, PowerPoint или фото', icon: 'pdf', onClick: () => create('pdf', id) },
     ];
   const base: MenuItem[] = [
     { label: 'Новая заметка', icon: 'note', onClick: () => create('note', id) },
     { label: 'Новая тетрадь', icon: 'notebook', onClick: () => create('notebook', id) },
-    { label: 'Импорт PDF', icon: 'pdf', onClick: () => create('pdf', id) },
+    { label: 'Импорт PDF, PowerPoint или фото', icon: 'pdf', onClick: () => create('pdf', id) },
   ];
   if (doc.role === 'subject')
     return [{ label: 'Новая тема', icon: 'folderPlus', onClick: () => create('folder', id, 'topic') }, { label: 'Новая лекция', icon: 'lecture', onClick: () => create('lecture', id) }, ...base];
@@ -261,7 +272,7 @@ export function Sidebar({
           items={[
             { label: 'Заметка', icon: 'note', onClick: () => create('note', null) },
             { label: 'Тетрадь', icon: 'notebook', onClick: () => create('notebook', null) },
-            { label: 'Импорт PDF', icon: 'pdf', onClick: () => create('pdf', null) },
+            { label: 'Импорт PDF, PowerPoint или фото', icon: 'pdf', onClick: () => create('pdf', null) },
             { label: 'Лекция', icon: 'lecture', onClick: () => create('lecture', null) },
             { label: 'Папка', icon: 'folder', onClick: () => create('folder', null) },
           ]}

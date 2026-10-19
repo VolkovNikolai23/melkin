@@ -36,6 +36,7 @@ export default function PdfView({ doc, initialPage, flashId }: { doc: Doc; initi
   const [tool, setTool] = useState<PdfTool>('text');
   const [current, setCurrent] = useState(1);
   const [thumbs, setThumbs] = useState(() => window.innerWidth > 1000);
+  const [pptxHint, setPptxHint] = useState(false);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<TextHit[] | null>(null);
   const [activeQuery, setActiveQuery] = useState('');
@@ -348,6 +349,16 @@ export default function PdfView({ doc, initialPage, flashId }: { doc: Doc; initi
           <Icon name="download" />
         </button>
       </div>
+
+      {doc.source?.kind === 'pptx' && !pptxHint && (
+        <div className="pdf-note">
+          <Icon name="lecture" size={18} />
+          <span>Презентация PowerPoint показана упрощённо: текст и картинки на месте, но без анимаций и точной вёрстки. Для точного вида сохраните её как PDF в PowerPoint или Keynote и загрузите заново.</span>
+          <button className="icon-btn small" onClick={() => setPptxHint(true)} aria-label="Скрыть подсказку">
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+      )}
 
       {hits && (
         <div className="pdf-hits">

@@ -15,6 +15,8 @@ export async function importPdf(file: File, parentId: string | null): Promise<Do
   await db.files.add({ id: fileId, kind: 'pdf', mime: 'application/pdf', name: file.name, size: file.size, blob: file, createdAt: now });
   const doc = await createDoc('pdf', parentId, file.name.replace(/\.pdf$/i, ''));
   await db.docs.update(doc.id, { fileId });
+  // текст страниц — в индекс поиска (в фоне)
+  void import('./textIndex').then((m) => m.ensurePdfIndex(fileId));
   return { ...doc, fileId };
 }
 

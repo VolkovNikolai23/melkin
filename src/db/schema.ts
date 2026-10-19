@@ -21,6 +21,8 @@ export interface Doc {
   isTemplate?: boolean;
   /** Для PDF-документа — ссылка на файл в таблице files */
   fileId?: string;
+  /** PDF сделан из PowerPoint (оригинал .pptx — в fileId источника) или из фото */
+  source?: { kind: 'pptx' | 'photos'; fileId?: string };
   /** Для папки: предмет или тема */
   role?: FolderRole;
   /** Иконка из набора и её цвет (для папок, предметов, тем, лекций) */

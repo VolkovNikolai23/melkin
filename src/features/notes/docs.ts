@@ -150,6 +150,7 @@ export async function purgeDoc(id: string) {
     // файлы PDF и картинок этих документов — удалим, если больше нигде не используются
     fileIds = [
       ...all.filter((d) => ids.includes(d.id) && d.fileId).map((d) => d.fileId!),
+      ...all.filter((d) => ids.includes(d.id) && d.source?.fileId).map((d) => d.source!.fileId!),
       ...blocks.flatMap((b) => (b.image?.fileId ? [b.image.fileId] : [])),
       ...pages.flatMap((p) => (p.items ?? []).flatMap((i) => (i.fileId ? [i.fileId] : []))),
     ];

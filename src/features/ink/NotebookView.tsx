@@ -202,7 +202,7 @@ const PageView = memo(function PageView({
   );
 });
 
-export function NotebookView({ doc }: { doc: Doc }) {
+export function NotebookView({ doc, initialPage = null }: { doc: Doc; initialPage?: number | null }) {
   const ids = useLiveQuery(() => pageIds(doc.id), [doc.id]);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(1);
@@ -271,6 +271,14 @@ export function NotebookView({ doc }: { doc: Doc }) {
   useEffect(() => {
     if (ids && !ids.length) appendPage(doc.id);
   }, [ids, doc.id]);
+
+  // переход к листу из поиска (?page=N, с единицы) — один раз, когда листы загрузились
+  const jumped = useRef<number | null>(null);
+  useEffect(() => {
+    if (!initialPage || !ids?.length || !scroller || jumped.current === initialPage) return;
+    jumped.current = initialPage;
+    requestAnimationFrame(() => goTo(Math.min(ids.length, initialPage) - 1));
+  });
 
   const goTo = (i: number) => {
     const el = scroller?.querySelector<HTMLElement>(`[data-page="${i}"]`);

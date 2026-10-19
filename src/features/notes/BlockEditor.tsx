@@ -20,7 +20,7 @@ import { useOutliner, type Caret, type EditorAction } from './outlinerContext';
 import { createDoc } from './docs';
 import { insertImages, pickFiles } from './images';
 import { SuggestPopup, useSuggestions, type SlashCommand } from './Suggest';
-import { insertTemplate, listTemplates } from './templates';
+import { BUILTIN_TEMPLATES, insertTemplate, listTemplates } from './templates';
 import { detectTrigger, type Trigger } from './trigger';
 import { fixRussianLayout } from '../../lib/layout';
 
@@ -128,6 +128,9 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
         return replaceRange(start, '[[');
       case 'math':
         return replaceRange(start, '$$  $$', 3);
+      case 'chem':
+        // $\ce{…}$ — курсор внутри скобок: H2SO4, Fe^{3+}, 2H2 + O2 -> 2H2O
+        return replaceRange(start, '$\\ce{}$', 5);
       case 'card':
         return run('sep:>>');
       case 'pdf': {
@@ -150,12 +153,9 @@ export function BlockEditor({ block, caret }: { block: Block; caret: Caret }) {
         ctx.setPropsOpen(block.id);
         return;
       case 'template': {
-        const templates = await listTemplates();
-        if (!templates.length) {
-          await dialog.alert('Шаблонов пока нет', 'Откройте нужный документ и в его меню «⋯» в боковой панели выберите «Сделать шаблоном».');
-          return;
-        }
-        const id = templates.length === 1 ? templates[0].id : await dialog.select('Какой шаблон вставить?', templates.map((t) => ({ value: t.id, label: t.title })), templates[0].id);
+        // свои шаблоны (документ → «Сделать шаблоном») и встроенные «Лекция», «Сводка по теме»
+        const templates = [...(await listTemplates()).map((t) => ({ value: t.id, label: t.title })), ...BUILTIN_TEMPLATES.map((t) => ({ value: t.id, label: t.title }))];
+        const id = await dialog.select('Какой шаблон вставить?', templates, templates[0].value, 'Свой шаблон: меню «⋯» документа в боковой панели → «Сделать шаблоном».');
         if (!id) return;
         await flush();
         const blank = isBlank();

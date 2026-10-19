@@ -36,7 +36,7 @@ export async function makeBackupFile(): Promise<File> {
     for (const t of TABLES) {
       if (t === 'files') files = await db.files.toArray();
       // ключи ИИ не кладём в копию: файл может оказаться в iCloud или у других людей
-      else if (t === 'meta') data[t] = (await db.meta.toArray()).filter((m) => m.key !== AI_KEYS_META);
+      else if (t === 'meta') data[t] = (await db.meta.toArray()).filter((m) => m.key !== AI_KEYS_META && !m.key.startsWith('pdftext:')); // индекс текста PDF пересоздаётся сам
       else data[t] = await db.table(t).toArray();
     }
   });

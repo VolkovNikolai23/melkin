@@ -1,4 +1,6 @@
 import katex from 'katex';
+// \ce{…} и \pu{…}: химические формулы и уравнения реакций (H2O, 2H2 + O2 -> 2H2O, стрелки равновесия)
+import 'katex/contrib/mhchem';
 import { tokenize, type SepKind } from '../../lib/markup';
 
 const cache = new Map<string, string>();

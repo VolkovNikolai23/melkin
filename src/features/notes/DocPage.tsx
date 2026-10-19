@@ -157,7 +157,7 @@ export function DocPage({ id, highlight, page, ann, inSplit }: { id: string; hig
       {(doc.type === 'note' || doc.type === 'daily') && <Outliner docId={doc.id} highlight={highlight} />}
       {doc.isTemplate && <p className="muted small template-note">Это шаблон: вставляется в другие документы командой /шаблон. Карточки шаблона не повторяются.</p>}
       {(doc.type === 'note' || doc.type === 'daily') && <Backlinks docId={doc.id} />}
-      {doc.type === 'notebook' && <NotebookView doc={doc} />}
+      {doc.type === 'notebook' && <NotebookView doc={doc} initialPage={page ?? null} />}
       {doc.type === 'pdf' && (
         <Suspense fallback={<div className="page-pad muted">Открываю PDF…</div>}>
           <PdfView doc={doc} initialPage={page ?? null} flashId={ann ?? null} />

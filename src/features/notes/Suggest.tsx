@@ -29,6 +29,7 @@ export type SlashCommand =
   | 'number'
   | 'props'
   | 'math'
+  | 'chem'
   | 'card'
   | 'pdf';
 
@@ -45,6 +46,7 @@ const SLASH: { cmd: SlashCommand; label: string; icon: IconName; kw: string }[] 
   { cmd: 'number', label: 'Нумерованный пункт', icon: 'listNumber', kw: 'список нумерация number list' },
   { cmd: 'props', label: 'Свойства блока', icon: 'props', kw: 'свойство свойства поле property' },
   { cmd: 'math', label: 'Формула (блочная)', icon: 'sigma', kw: 'формула latex math tex' },
+  { cmd: 'chem', label: 'Химическая формула или реакция', icon: 'flask', kw: 'химия формула реакция вещество chem ce mhchem' },
   { cmd: 'card', label: 'Карточка вопрос >> ответ', icon: 'card', kw: 'карточка вопрос ответ card flashcard' },
   { cmd: 'pdf', label: 'Импорт PDF (ссылка на него)', icon: 'pdf', kw: 'pdf пдф файл документ учебник' },
 ];

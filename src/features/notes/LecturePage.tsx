@@ -7,7 +7,9 @@ import type { Doc } from '../../db/schema';
 import { navigate, useRoute } from '../../lib/router';
 import { plural } from '../../lib/time';
 import { NotebookView } from '../ink/NotebookView';
-import { importPdf } from '../pdf/annotations';
+import { importSlides, SLIDES_ACCEPT } from '../pdf/importSlides';
+import { showBusy } from '../../components/busy';
+import { dialog } from '../../components/dialog';
 import { knowledgeOf } from '../review/stats';
 import { docIcon } from './docIcons';
 import { collectSubtree, createDoc, sortDocs } from './docs';
@@ -54,10 +56,17 @@ function NotesTab({ lecture }: { lecture: Doc }) {
     await db.docs.update(lecture.id, { lecture: { ...lecture.lecture, notebookId: nb.id } });
   };
   const uploadSlides = async () => {
-    const [file] = await pickFiles('application/pdf,.pdf', false);
-    if (!file) return;
-    const d = await importPdf(file, lecture.id);
-    await db.docs.update(lecture.id, { lecture: { ...lecture.lecture, slidesId: d.id } });
+    const files = await pickFiles(SLIDES_ACCEPT, true);
+    if (!files.length) return;
+    const done = showBusy('Импортирую презентацию…');
+    try {
+      const d = await importSlides(files, lecture.id);
+      if (d) await db.docs.update(lecture.id, { lecture: { ...lecture.lecture, slidesId: d.id } });
+    } catch (e) {
+      dialog.alert('Не удалось импортировать', e instanceof Error ? e.message : String(e));
+    } finally {
+      done();
+    }
   };
 
   const left =
@@ -81,7 +90,7 @@ function NotesTab({ lecture }: { lecture: Doc }) {
           <Icon name="lecture" size={36} />
         </div>
         <h3>Презентация преподавателя</h3>
-        <p className="muted">Загрузите PDF — поверх можно писать Pencil, выделять маркером и делать карточки. PowerPoint пока сохраните в PDF («Экспорт → PDF»).</p>
+        <p className="muted">PDF, PowerPoint (.pptx) или фото слайдов — поверх можно писать Pencil, выделять маркером и делать карточки.</p>
         <button className="btn primary" onClick={uploadSlides}>
           <Icon name="upload" /> Загрузить презентацию
         </button>

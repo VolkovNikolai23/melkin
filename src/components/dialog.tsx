@@ -55,9 +55,10 @@ export const dialog = {
   async choose(title: string, message: string, choices: Choice[]): Promise<string | null> {
     return (await open({ title, message, choices })).choice;
   },
-  async select(title: string, options: { value: string; label: string }[], value: string): Promise<string | null> {
+  async select(title: string, options: { value: string; label: string }[], value: string, message?: string): Promise<string | null> {
     const r = await open({
       title,
+      message,
       select: { options, value },
       choices: [
         { label: 'Отмена', value: 'cancel' },
