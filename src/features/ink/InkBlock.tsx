@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { db } from '../../db/db';
+import { markInkDirty } from '../ai/recognize';
 import type { Block, Stroke } from '../../db/schema';
 import { INK_DEFAULT_HEIGHT, INK_WIDTH } from '../notes/blocks';
 import { strokesBottom } from './geometry';
@@ -17,6 +18,7 @@ export function InkBlock({ block, readOnly }: { block: Block; readOnly?: boolean
   const onChange = useCallback(
     (strokes: Stroke[]) => {
       db.blocks.update(block.id, { ink: { width: INK_WIDTH, height: heightRef.current, strokes }, updatedAt: Date.now() });
+      markInkDirty('block', block.id);
     },
     [block.id],
   );

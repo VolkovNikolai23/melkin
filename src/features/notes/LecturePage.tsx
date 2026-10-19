@@ -7,6 +7,7 @@ import type { Doc } from '../../db/schema';
 import { navigate, useRoute } from '../../lib/router';
 import { plural } from '../../lib/time';
 import { NotebookView } from '../ink/NotebookView';
+import { SummaryTab } from '../ai/SummaryTab';
 import { importSlides, SLIDES_ACCEPT } from '../pdf/importSlides';
 import { showBusy } from '../../components/busy';
 import { dialog } from '../../components/dialog';
@@ -136,9 +137,9 @@ export function LecturePage({ lecture }: { lecture: Doc }) {
       db.docs
         .where('parentId')
         .equals(lecture.id)
-        .filter((d) => !d.deletedAt && d.id !== lecture.lecture?.notebookId && d.id !== lecture.lecture?.slidesId)
+        .filter((d) => !d.deletedAt && d.id !== lecture.lecture?.notebookId && d.id !== lecture.lecture?.slidesId && d.id !== lecture.lecture?.summaryId)
         .toArray(),
-    [lecture.id, lecture.lecture?.notebookId, lecture.lecture?.slidesId],
+    [lecture.id, lecture.lecture?.notebookId, lecture.lecture?.slidesId, lecture.lecture?.summaryId],
   );
 
   return (
@@ -165,9 +166,7 @@ export function LecturePage({ lecture }: { lecture: Doc }) {
       </div>
       <div className="lecture-body">
         {tab === 'notes' && <NotesTab lecture={lecture} />}
-        {tab === 'summary' && (
-          <Placeholder icon="sparkle" title="Сводки появятся на этапе ИИ" text="ИИ разобьёт лекцию на подтемы и напишет по каждой простую цветную сводку — коротко или подробно, с картинками и ссылками на источники." />
-        )}
+        {tab === 'summary' && <SummaryTab lecture={lecture} />}
         {tab === 'tests' && <Placeholder icon="check" title="Тесты появятся позже" text="Тесты по подтемам и по всей теме: 7 типов вопросов, разбор ошибок, ошибки станут карточками." />}
         {tab === 'knowledge' && <KnowledgeTab lecture={lecture} />}
       </div>

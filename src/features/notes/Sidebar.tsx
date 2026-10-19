@@ -10,6 +10,7 @@ import type { Doc, DocType, FolderRole } from '../../db/schema';
 import { navigate } from '../../lib/router';
 import { importSlides, SLIDES_ACCEPT } from '../pdf/importSlides';
 import { showBusy } from '../../components/busy';
+import { openAsk } from '../ai/AskDialog';
 import { badgeCount, sumDue, type DueCount } from '../review/scheduler';
 import { docIcon } from './docIcons';
 import { collectSubtree, createDoc, createFolder, isContainer, isLive, moveDoc, moveDocTo, renameDoc, shiftDoc, sortDocs, trashDoc } from './docs';
@@ -239,6 +240,9 @@ export function Sidebar({
         </button>
         <button className={'nav-item' + (routeName === 'stats' ? ' active' : '')} onClick={() => nav('stats')}>
           <Icon name="star" /> Статистика
+        </button>
+        <button className="nav-item" onClick={() => openAsk(null)}>
+          <Icon name="sparkle" /> Спросить ИИ
         </button>
       </nav>
 

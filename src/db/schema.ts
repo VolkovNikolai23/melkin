@@ -29,13 +29,33 @@ export interface Doc {
   icon?: string;
   color?: string;
   /** Лекция: её конспект (тетрадка) и презентация (PDF) */
-  lecture?: { notebookId?: string; slidesId?: string };
+  lecture?: { notebookId?: string; slidesId?: string; summaryId?: string; outline?: Outline };
   /** Корзина: когда удалён (через 30 дней удаляется насовсем) */
   deletedAt?: number;
   /** Корень удаления — именно его показываем в корзине и восстанавливаем вместе с вложенными */
   trashRoot?: boolean;
   createdAt: number;
   updatedAt: number;
+}
+
+/** Разбивка лекции на темы и подтемы (ИИ предлагает, пользователь правит) */
+export interface OutlineSub {
+  id: string;
+  title: string;
+  /** Страницы презентации, где говорится о подтеме */
+  pages?: number[];
+}
+export interface OutlineTopic {
+  id: string;
+  title: string;
+  subtopics: OutlineSub[];
+}
+export type Outline = OutlineTopic[];
+
+/** Откуда взята картинка или схема (под ней — ссылка для проверки) */
+export interface SourceRef {
+  label: string;
+  url?: string;
 }
 
 export type InkTool = 'pen' | 'marker';
@@ -67,6 +87,8 @@ export interface Rect {
   y: number;
   w: number;
   h: number;
+  /** Текст подписи под областью (если нашёл ИИ) — правильный ответ карточки */
+  label?: string;
 }
 
 export interface ImageData {
@@ -118,6 +140,12 @@ export interface Block {
   pdfRef?: PdfRef;
   /** Карточки блока временно отключены (текст и история сохраняются) */
   cardsOff?: boolean;
+  /** Источник картинки или схемы (интернет, статья); для страниц PDF — pdfRef */
+  source?: SourceRef;
+  /** Блок создан ИИ: сводка подтемы (id подтемы), чтобы при пересоздании заменить старую */
+  ai?: { kind: 'summary' | 'cards' | 'heading'; sub?: string; topic?: string };
+  /** Когда рукопись блока распознана (время изменения блока на тот момент) */
+  recognizedAt?: number;
   /** Распознанный текст рукописного блока (для офлайн-поиска и ИИ) */
   recognizedText?: string;
   createdAt: number;
@@ -167,6 +195,8 @@ export interface Page {
   items?: PageItem[];
   /** Распознанный текст страницы (для офлайн-поиска и ИИ) */
   recognizedText?: string;
+  /** Когда лист распознан (updatedAt листа на тот момент) — чтобы не распознавать повторно */
+  recognizedAt?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -279,6 +309,15 @@ export interface Settings {
   /** Провайдер ИИ и модель; ключи хранятся отдельно (meta 'aiKeys') и не попадают в копию */
   aiProvider: AiProviderId;
   aiModel: { gemini: string; claude: string };
+  /** Распознавать рукопись в фоне, когда есть сеть (для поиска и ИИ) */
+  autoRecognize: boolean;
+}
+
+/** Кэш ответов ИИ: одинаковый запрос не тратит лимит повторно */
+export interface AiCacheRow {
+  key: string;
+  value: string;
+  createdAt: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -287,4 +326,5 @@ export const DEFAULT_SETTINGS: Settings = {
   font: 'nunito',
   aiProvider: 'gemini',
   aiModel: { gemini: 'gemini-flash-latest', claude: 'claude-opus-5-5' },
+  autoRecognize: true,
 };

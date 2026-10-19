@@ -8,6 +8,9 @@ import { plural } from '../../lib/time';
 import { InkCanvas } from '../ink/InkCanvas';
 import { InkToolbar } from '../ink/InkToolbar';
 import { CardFace } from './CardFace';
+import { showAiAnswer } from '../ai/AiAnswer';
+import { aiErrorText, aiReady } from '../ai/client';
+import { checkAnswer, explainSimpler, type Verdict } from '../ai/review';
 import { answerCard, cardsInScope, logExpress, newLimitLeft, parseScope, undoAnswer, type Answer } from './data';
 import {
   afterAnswer,
@@ -34,6 +37,8 @@ interface Step {
 const needsOwnAnswer = (c: CardRow) => !c.twoSided && c.kind !== 'mcq';
 
 type MyAnswer = { mode: 'text' | 'pen'; text: string; strokes: Stroke[] };
+type AiCheck = { loading: true } | { loading: false; verdict: Verdict; feedback: string; recognized?: string } | { loading: false; error: string };
+const VERDICT_LABEL: Record<Verdict, string> = { correct: 'Верно', partial: 'Частично', wrong: 'Неверно' };
 const EMPTY_ANSWER: MyAnswer = { mode: 'text', text: '', strokes: [] };
 
 /** Поле для своего ответа: текстом (или Scribble) либо от руки Pencil. Проверку ИИ добавим на этапе 4. */
@@ -93,6 +98,7 @@ export function ReviewView({ scopeStr, express = false }: { scopeStr: string | n
   const [busy, setBusy] = useState(false);
   const [total, setTotal] = useState(0);
   const [mine, setMine] = useState<MyAnswer>(EMPTY_ANSWER);
+  const [check, setCheck] = useState<AiCheck | null>(null);
 
   const scopeTitle = useLiveQuery(
     async () => (scope.kind === 'all' ? 'Все карточки' : scope.kind === 'tag' ? '#' + scope.id : ((await db.docs.get(scope.id))?.title ?? '')),
@@ -112,6 +118,7 @@ export function ReviewView({ scopeStr, express = false }: { scopeStr: string | n
       setSteps([]);
       setRevealed(false);
       setMine(EMPTY_ANSWER);
+      setCheck(null);
     })();
     return () => {
       alive = false;
@@ -146,6 +153,7 @@ export function ReviewView({ scopeStr, express = false }: { scopeStr: string | n
         setNow(t);
         setRevealed(false);
         setMine(EMPTY_ANSWER);
+        setCheck(null);
       } finally {
         setBusy(false);
       }
@@ -163,10 +171,26 @@ export function ReviewView({ scopeStr, express = false }: { scopeStr: string | n
       setSteps(steps.slice(0, -1));
       setNow(Date.now());
       setRevealed(true);
+      setCheck(null);
     } finally {
       setBusy(false);
     }
   }, [steps, busy]);
+
+  /** «Показать ответ» / «Проверить»: если написан свой ответ и есть ключ — проверяет ИИ (без сети — сами). */
+  const reveal = useCallback(async () => {
+    setRevealed(true);
+    if (!current || !needsOwnAnswer(current) || (!mine.text.trim() && !mine.strokes.length)) return;
+    if (!(await aiReady())) return;
+    const card = current;
+    setCheck({ loading: true });
+    try {
+      const r = await checkAnswer(card, mine, { width: 800, height: 240 });
+      setCheck((c) => (c ? { loading: false, ...r } : c));
+    } catch (e) {
+      setCheck((c) => (c ? { loading: false, error: aiErrorText(e) } : c));
+    }
+  }, [current, mine]);
 
   // Клавиатура: пробел/Enter — показать ответ, затем 1 — «не знаю», 2/пробел — «знаю», Z — отменить
   useEffect(() => {
@@ -177,7 +201,7 @@ export function ReviewView({ scopeStr, express = false }: { scopeStr: string | n
         undo();
       } else if (!revealed && (e.key === ' ' || e.key === 'Enter')) {
         e.preventDefault();
-        setRevealed(true);
+        reveal();
       } else if (revealed && e.key === '1') answer(Rating.DontKnow);
       else if (revealed && (e.key === '2' || e.key === ' ' || e.key === 'Enter')) {
         e.preventDefault();
@@ -186,7 +210,7 @@ export function ReviewView({ scopeStr, express = false }: { scopeStr: string | n
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
-  }, [revealed, answer, undo]);
+  }, [revealed, answer, undo, reveal]);
 
   if (!session) return <div className="page-pad muted">Загрузка…</div>;
   const counts = sessionCounts(session, now);
@@ -220,24 +244,44 @@ export function ReviewView({ scopeStr, express = false }: { scopeStr: string | n
       {current ? (
         <>
           <div className="review-body">
-            <CardFace key={current.id + ':' + current.reps} card={current} revealed={revealed} onReveal={() => setRevealed(true)} />
-            {own && <AnswerPad value={mine} onChange={setMine} onSubmit={() => setRevealed(true)} readOnly={revealed} />}
+            <CardFace key={current.id + ':' + current.reps} card={current} revealed={revealed} onReveal={reveal} />
+            {own && <AnswerPad value={mine} onChange={setMine} onSubmit={reveal} readOnly={revealed} />}
+            {revealed && check && (
+              <div className={'ai-check' + ('verdict' in check ? ' v-' + check.verdict : '')} role="status">
+                {check.loading ? (
+                  <>
+                    <span className="spinner" aria-hidden /> ИИ проверяет ответ…
+                  </>
+                ) : 'error' in check ? (
+                  <span>Проверьте сами — ИИ сейчас недоступен. {check.error}</span>
+                ) : (
+                  <>
+                    <strong>ИИ: {VERDICT_LABEL[check.verdict]}.</strong> {check.feedback}
+                  </>
+                )}
+              </div>
+            )}
+            {revealed && (
+              <button className="btn ghost small" onClick={() => showAiAnswer('Проще', () => explainSimpler(current))}>
+                <Icon name="sparkle" size={18} /> Объясни проще
+              </button>
+            )}
             <button className="btn ghost small to-source" onClick={() => navigate(`doc/${current.docId}?b=${current.blockId}`)}>
               <Icon name="note" size={18} /> Открыть в заметке
             </button>
           </div>
           <footer className="review-foot">
             {!revealed ? (
-              <button className="btn primary big" onClick={() => setRevealed(true)}>
+              <button className="btn primary big" onClick={reveal}>
                 {own && (mine.text.trim() || mine.strokes.length) ? 'Проверить' : 'Показать ответ'}
               </button>
             ) : (
               <div className="grades two">
-                <button className="grade grade-no" disabled={busy} onClick={() => answer(Rating.DontKnow)}>
+                <button className={'grade grade-no' + (check && 'verdict' in check && check.verdict === 'wrong' ? ' suggested' : '')} disabled={busy} onClick={() => answer(Rating.DontKnow)}>
                   <span className="grade-label">Не знаю</span>
                   <span className="grade-int">{express ? 'ещё раз' : intervals ? `через ${formatInterval(intervals[Rating.DontKnow])}` : ''}</span>
                 </button>
-                <button className="grade grade-yes" disabled={busy} onClick={() => answer(Rating.Know)}>
+                <button className={'grade grade-yes' + (check && 'verdict' in check && check.verdict === 'correct' ? ' suggested' : '')} disabled={busy} onClick={() => answer(Rating.Know)}>
                   <span className="grade-label">Знаю</span>
                   <span className="grade-int">{express ? 'дальше' : intervals ? `через ${formatInterval(intervals[Rating.Know])}` : ''}</span>
                 </button>

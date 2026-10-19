@@ -39,3 +39,7 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
+// Рукопись распознаётся в фоне, когда есть сеть и ключ ИИ (текст — для поиска и сводок)
+setTimeout(() => {
+  import('./features/ai/recognize').then((m) => m.startAutoRecognize()).catch(() => undefined);
+}, 8000);

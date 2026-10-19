@@ -7,6 +7,7 @@ import { navigate } from '../../lib/router';
 import { NotebookView } from '../ink/NotebookView';
 import { dialog } from '../../components/dialog';
 import { openSplit } from '../../lib/splitStore';
+import { openAsk } from '../ai/AskDialog';
 import { Backlinks } from '../links/LinkViews';
 import { docIcon } from './docIcons';
 import { createDoc, createFolder, docLabel, renameDoc, restoreDoc, sortDocs } from './docs';
@@ -136,6 +137,11 @@ export function DocPage({ id, highlight, page, ann, inSplit }: { id: string; hig
           {(doc.type === 'folder' || doc.type === 'lecture' || (cardsDue ?? 0) > 0) && doc.type !== 'notebook' && (
             <button className="btn small" onClick={() => navigate(`review?scope=${reviewScope}:${doc.id}`)}>
               <Icon name="cards" size={18} /> Повторить
+            </button>
+          )}
+          {doc.type !== 'folder' && (
+            <button className="icon-btn" title="Спросить ИИ (можно от руки)" aria-label="Спросить ИИ" onClick={() => openAsk(doc.id)}>
+              <Icon name="sparkle" />
             </button>
           )}
           {!inSplit && (

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DialogHost } from './components/dialog';
+import { AiAnswerHost } from './features/ai/AiAnswer';
+import { AskDialogHost } from './features/ai/AskDialog';
 import { PwaBanners } from './components/pwa';
 import { Home } from './components/Home';
 import { Icon } from './components/Icon';
@@ -116,6 +118,8 @@ export function App() {
       <PwaBanners />
       <IconPickerHost />
       <DialogHost />
+      <AiAnswerHost />
+      <AskDialogHost />
     </div>
   );
 }

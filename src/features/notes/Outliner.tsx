@@ -158,6 +158,18 @@ function BlockRow({
               <Icon name="pdf" size={14} /> стр. {block.pdfRef.page}
             </button>
           )}
+          {block.source && (
+            <div className="block-source">
+              Источник:{' '}
+              {block.source.url ? (
+                <a href={block.source.url} target="_blank" rel="noreferrer">
+                  {block.source.label}
+                </a>
+              ) : (
+                block.source.label
+              )}
+            </div>
+          )}
           <PropsView
             block={block}
             open={propsOpen}

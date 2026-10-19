@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { Annotation, Block, CardRow, Doc, FileRow, MetaRow, Page, ReviewLogRow, Settings, TestAttempt, TestRow } from './schema';
+import type { AiCacheRow, Annotation, Block, CardRow, Doc, FileRow, MetaRow, Page, ReviewLogRow, Settings, TestAttempt, TestRow } from './schema';
 import { DEFAULT_SETTINGS } from './schema';
 import { migrateBlockV1, migrateCardIdV1, migrateCardV1 } from './migrations';
 import { migrateCardToLadder } from '../features/review/ladder';
@@ -15,6 +15,7 @@ export class MelkinDB extends Dexie {
   cards!: EntityTable<CardRow, 'id'>;
   reviewLogs!: EntityTable<ReviewLogRow, 'id'>;
   meta!: EntityTable<MetaRow, 'key'>;
+  aiCache!: EntityTable<AiCacheRow, 'key'>;
 
   constructor(name = 'melkin') {
     super(name);
@@ -105,10 +106,24 @@ export class MelkinDB extends Dexie {
       testAttempts: 'id, testId, docId, at',
       meta: 'key',
     });
+    // v6: кэш ответов ИИ (не входит в резервную копию — он пересоздаётся)
+    this.version(6).stores({
+      docs: 'id, parentId, type, updatedAt, dailyDate, deletedAt',
+      blocks: 'id, docId, parentId, updatedAt, *tags, *links, portalOf',
+      pages: 'id, docId, [docId+order]',
+      files: 'id, kind',
+      annotations: 'id, docId, [docId+page], blockId',
+      cards: 'id, blockId, docId, due, state',
+      reviewLogs: 'id, cardId, review',
+      tests: 'id, docId, updatedAt',
+      testAttempts: 'id, testId, docId, at',
+      meta: 'key',
+      aiCache: 'key, createdAt',
+    });
   }
 }
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const db = new MelkinDB();
 

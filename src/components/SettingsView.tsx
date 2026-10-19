@@ -73,7 +73,11 @@ function AiSettings() {
           onBlur={(e) => e.target.value.trim() && saveSettings({ aiModel: { ...settings.aiModel, [p.id]: e.target.value.trim() } })}
         />
       </label>
-      <p className="muted small">{keys[p.id] ? '✓ Ключ сохранён. Функции ИИ появятся на следующих этапах.' : 'Ключ не задан — функции ИИ будут недоступны.'}</p>
+      <p className="muted small">{keys[p.id] ? '✓ Ключ сохранён: работают сводки, карточки, «объясни/переведи» лассо, вопросы и распознавание рукописи.' : 'Ключ не задан — функции ИИ недоступны.'}</p>
+      <label className="check-row">
+        <input type="checkbox" checked={settings.autoRecognize} onChange={(e) => saveSettings({ autoRecognize: e.target.checked })} /> Распознавать рукопись в фоне (для поиска и сводок; тратит запросы к ИИ)
+      </label>
+      <p className="muted small">Ответы ИИ кэшируются на устройстве — одинаковый запрос второй раз лимит не тратит. Из России Gemini работает через VPN.</p>
     </section>
   );
 }

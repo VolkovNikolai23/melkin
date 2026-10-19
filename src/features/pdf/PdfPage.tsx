@@ -144,6 +144,8 @@ export const PdfPage = memo(function PdfPage({ pdf, docId, n, size, width, tool,
               readOnly={tool !== 'ink'}
               onChange={onInk}
               onPinch={onPinch}
+              underlay={() => canvasRef.current}
+              aiContext={`страница ${n} презентации или учебника (PDF)`}
             />
           </div>
           {tool === 'region' && (

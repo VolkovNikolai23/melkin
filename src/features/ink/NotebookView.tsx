@@ -6,6 +6,7 @@ import { MenuButton } from '../../components/Menu';
 import { dialog } from '../../components/dialog';
 import { deliverFile } from '../../db/backup';
 import { db } from '../../db/db';
+import { markInkDirty } from '../ai/recognize';
 import type { Doc, PageBackground, PageItem, Stroke } from '../../db/schema';
 import { uid } from '../../lib/id';
 import { pickFiles, storeImage } from '../notes/images';
@@ -138,6 +139,7 @@ const PageView = memo(function PageView({
       const now = Date.now();
       db.pages.update(pageId, { strokes, updatedAt: now });
       if (docId) db.docs.update(docId, { updatedAt: now });
+      markInkDirty('page', pageId);
     },
     [pageId, docId],
   );
@@ -194,6 +196,7 @@ const PageView = memo(function PageView({
           onStrokeEnd={onStrokeEnd}
           onPinch={onPinch}
           insertRef={insert}
+          aiContext={`рукописный конспект, лист ${index + 1}`}
         />
       ) : (
         <div className="nb-page nb-page-placeholder" style={{ aspectRatio: `${PAGE_W} / ${PAGE_H}`, background: page?.paper }} />
@@ -344,6 +347,20 @@ export function NotebookView({ doc, initialPage = null }: { doc: Doc; initialPag
     }
   };
 
+  const recognizeAll = async () => {
+    setBusy('Распознаю рукопись…');
+    try {
+      const { recognizeNotebook } = await import('../ai/recognize');
+      const n = await recognizeNotebook(doc.id, (d, t) => setBusy(`Распознаю рукопись: ${d} из ${t}`));
+      if (!n) dialog.alert('Всё уже распознано', 'Текст листов есть в поиске и используется для сводок.');
+    } catch (e) {
+      const { aiErrorText } = await import('../ai/client');
+      dialog.alert('Не удалось распознать', aiErrorText(e));
+    } finally {
+      setBusy('');
+    }
+  };
+
   if (!ids) return null;
   return (
     <div className="notebook">
@@ -360,6 +377,7 @@ export function NotebookView({ doc, initialPage = null }: { doc: Doc; initialPag
               { label: 'Скан из готового фото', icon: 'scan', onClick: () => pickPhoto(false, true) },
               { label: 'Новый лист', icon: 'plus', onClick: addPage },
               { label: 'Экспорт тетради в PDF', icon: 'fileExport', onClick: exportPdf },
+              { label: 'Распознать рукопись (ИИ)', icon: 'text', onClick: recognizeAll },
             ]}
           >
             <Icon name="plus" />

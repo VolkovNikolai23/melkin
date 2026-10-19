@@ -3543,3 +3543,254 @@ button.card-badge {
   flex: 1;
   min-width: 0;
 }
+.block-source {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 2px 0 6px;
+}
+.block-source a {
+  color: var(--accent);
+}
+
+/* ---------- ИИ: сводки лекции ---------- */
+.ai-status {
+  position: sticky;
+  top: 8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  margin: 0 auto 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 8px 14px;
+  font-size: 15px;
+}
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 3s;
+  }
+}
+.outline-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-start;
+}
+.oe-topic {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+}
+.oe-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 6px;
+}
+.oe-sub {
+  padding-left: 30px;
+}
+.oe-num {
+  width: 24px;
+  text-align: center;
+  font-weight: 800;
+  color: var(--accent);
+}
+.oe-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+.oe-sub .oe-title {
+  font-weight: 400;
+}
+.oe-pages {
+  width: 96px;
+  flex-shrink: 0;
+}
+.oe-add {
+  margin-left: 30px;
+}
+.oe-actions {
+  margin-top: 16px;
+}
+.ai-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.sub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.sub-topic-title {
+  font-weight: 800;
+  margin: 4px 0;
+}
+.sub-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 0 4px 14px;
+  border-left: 3px solid var(--accent-soft);
+}
+.sub-title {
+  flex: 1;
+  min-width: 160px;
+}
+.summary-doc {
+  margin-top: 8px;
+}
+.approve-modal {
+  max-width: 680px;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+}
+.approve-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px;
+  margin-bottom: 8px;
+}
+.approve-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.approve-card.off {
+  opacity: 0.5;
+}
+.approve-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.approve-card .check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.approve-card textarea {
+  resize: vertical;
+  margin: 0;
+}
+.ai-answer {
+  max-width: 620px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+.ai-answer h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  margin: 0 auto 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+.ai-thinking {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ai-text p {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+.ai-region {
+  position: absolute;
+  border: 2px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-radius: 6px;
+  pointer-events: none;
+}
+.ask-modal {
+  max-width: 640px;
+}
+.ask-modal .segmented {
+  margin-bottom: 10px;
+}
+.ask-text {
+  width: 100%;
+  resize: vertical;
+}
+.ask-ink .ink-canvas {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.ask-modal .check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 15px;
+}
+.panel .check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 15px;
+}
+.ai-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin: 10px 0;
+  background: var(--surface-2);
+  font-size: 15px;
+}
+.ai-check.v-correct {
+  background: color-mix(in srgb, var(--good, #16a34a) 14%, var(--surface));
+}
+.ai-check.v-partial {
+  background: color-mix(in srgb, #ca8a04 14%, var(--surface));
+}
+.ai-check.v-wrong {
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+}
+.grade.suggested {
+  box-shadow: 0 0 0 3px var(--accent);
+}

@@ -41,6 +41,9 @@ interface Props {
   onStrokeEnd?: (bottom: number) => void;
   /** Щипок двумя пальцами: множитель масштаба */
   onPinch?: (ratio: number) => void;
+  /** ИИ-ручка: откуда фрагмент (для подсказки модели) и подложка (страница PDF) */
+  aiContext?: string;
+  underlay?: () => CanvasImageSource | null;
   /** Сюда холст кладёт функцию вставки объекта (картинки) с записью в историю */
   insertRef?: React.MutableRefObject<((item: PageItem) => void) | null>;
   className?: string;
@@ -163,6 +166,8 @@ export function InkCanvas({
   onStrokeEnd,
   onPinch,
   insertRef,
+  aiContext,
+  underlay,
   className,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -187,6 +192,8 @@ export function InkCanvas({
   const [selection, setSelection] = useState<string[]>([]);
   const [itemSel, setItemSel] = useState<string[]>([]);
   const [activeItem, setActiveItem] = useState<string | null>(null);
+  /** Обведённая лассо область без штрихов — для «объясни/переведи» (например, текст слайда) */
+  const [aiRegion, setAiRegion] = useState<BBox | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const withItems = !!onItemsChange;
   // «Текст» есть только на листах тетради; на других холстах это обычная ручка
@@ -197,6 +204,7 @@ export function InkCanvas({
     if (tool !== 'lasso') {
       setSelection([]);
       setItemSel([]);
+      setAiRegion(null);
     }
     if (tool !== 'text') {
       setActiveItem(null);
@@ -448,6 +456,7 @@ export function InkCanvas({
       if (!handle && !inside) {
         setSelection([]);
         setItemSel([]);
+        setAiRegion(null);
       }
       register();
       return;
@@ -546,8 +555,17 @@ export function InkCanvas({
     }
     if (d.mode === 'lasso') {
       lassoRef.current?.setAttribute('d', '');
-      setSelection(selectByLasso(strokesRef.current, d.flat));
-      setItemSel(selectItemsByLasso(itemsRef.current, d.flat));
+      const sel = selectByLasso(strokesRef.current, d.flat);
+      const isel = selectItemsByLasso(itemsRef.current, d.flat);
+      setSelection(sel);
+      setItemSel(isel);
+      // ничего не выделено, но обвели заметную область — можно спросить ИИ про неё
+      if (!sel.length && !isel.length) {
+        const xs = d.flat.filter((_, i) => i % 2 === 0);
+        const ys = d.flat.filter((_, i) => i % 2 === 1);
+        const box = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+        setAiRegion(box.w > 30 && box.h > 15 ? box : null);
+      }
       register();
       return;
     }
@@ -627,6 +645,53 @@ export function InkCanvas({
       },
     },
   ];
+
+  /** ИИ-ручка: рисуем обведённый фрагмент (с подложкой PDF и картинками) и спрашиваем модель */
+  const askAi = async (kind: 'explain' | 'translate', box: BBox) => {
+    const pad = 16;
+    const b = { x: Math.max(0, box.x - pad), y: Math.max(0, box.y - pad), w: 0, h: 0 };
+    b.w = Math.min(width, box.x + box.w + pad) - b.x;
+    b.h = Math.min(height, box.y + box.h + pad) - b.y;
+    const [{ renderInk }, { ask, blobPart }, { prompt }, { showAiAnswer }] = await Promise.all([
+      import('../ai/inkImage'),
+      import('../ai/client'),
+      import('../ai/prompts'),
+      import('../ai/AiAnswer'),
+    ]);
+    const c = await renderInk({ width, height, strokes: strokesRef.current, items: itemsRef.current, underlay: underlay?.() ?? undefined, withImages: true }, b, 1400);
+    const blob = await new Promise<Blob>((res, rej) => c.toBlob((x) => (x ? res(x) : rej(new Error('toBlob'))), 'image/jpeg', 0.85));
+    const insertBelow = withItems
+      ? {
+          label: 'Вставить на лист',
+          run: (text: string) => {
+            const plain = text.replace(/\*\*|==\{\w+\}|==|__/g, '').trim();
+            const before = snap();
+            const it: PageItem = {
+              id: uid(),
+              kind: 'text',
+              x: Math.min(b.x, width - 300),
+              y: Math.min(height - 80, b.y + b.h + 8),
+              w: Math.min(640, width - Math.min(b.x, width - 300)),
+              h: 40,
+              text: plain,
+              fontSize: 22,
+              color: '#7c3aed',
+            };
+            commit({ s: before.s, i: [...before.i, it] }, before);
+            register();
+          },
+        }
+      : undefined;
+    await showAiAnswer(
+      kind === 'explain' ? 'Объяснение' : 'Перевод',
+      async () =>
+        ask({
+          system: prompt(kind, { context: aiContext ?? 'конспект' }),
+          parts: [await blobPart(blob), { text: kind === 'explain' ? 'Объясни этот фрагмент.' : 'Переведи этот фрагмент.' }],
+        }),
+      { preview: blob, action: insertBelow },
+    );
+  };
 
   const commitItems = useCallback(
     (next: PageItem[]) => {
@@ -730,7 +795,37 @@ export function InkCanvas({
               <Icon name={a.icon} size={18} />
             </button>
           ))}
+          <span className="tb-sep" />
+          <button className="tool-btn" title="Объяснить (ИИ)" aria-label="Объяснить выделенное (ИИ)" onClick={() => askAi('explain', selBox)}>
+            <Icon name="sparkle" size={18} />
+          </button>
+          <button className="tool-btn" title="Перевести (ИИ)" aria-label="Перевести выделенное (ИИ)" onClick={() => askAi('translate', selBox)}>
+            <Icon name="globe" size={18} />
+          </button>
         </div>
+      )}
+      {aiRegion && !selBox && !readOnly && (
+        <>
+          <div
+            className="ai-region"
+            style={{ left: `${(aiRegion.x / width) * 100}%`, top: `${(aiRegion.y / height) * 100}%`, width: `${(aiRegion.w / width) * 100}%`, height: `${(aiRegion.h / height) * 100}%` }}
+          />
+          <div
+            className="lasso-menu"
+            style={{ left: `${(Math.max(0, aiRegion.x) / width) * 100}%`, top: `${(Math.max(0, aiRegion.y - 8) / height) * 100}%` }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <button className="tool-btn text" onClick={() => askAi('explain', aiRegion)}>
+              <Icon name="sparkle" size={18} /> Объяснить
+            </button>
+            <button className="tool-btn text" onClick={() => askAi('translate', aiRegion)}>
+              <Icon name="globe" size={18} /> Перевести
+            </button>
+            <button className="tool-btn" aria-label="Закрыть" onClick={() => setAiRegion(null)}>
+              <Icon name="close" size={18} />
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

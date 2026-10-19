@@ -5,6 +5,7 @@ import { useFileUrl } from '../../components/useFileUrl';
 import { db } from '../../db/db';
 import type { Block, ImageData, Rect } from '../../db/schema';
 import { uid } from '../../lib/id';
+import { dialog } from '../../components/dialog';
 import { syncBlockCards } from './sync';
 
 type Drag =
@@ -26,6 +27,22 @@ export function OcclusionEditor({ block, onClose }: { block: Block; onClose: () 
   const [rects, setRects] = useState<Rect[]>(image.occlusions ?? []);
   const [mode, setMode] = useState<'hideOne' | 'hideAll'>(image.occlusionMode ?? 'hideOne');
   const [sel, setSel] = useState<string | null>(null);
+  const [finding, setFinding] = useState(false);
+  // ИИ находит подписи и сразу закрывает их; лишние можно удалить, недостающие — дорисовать
+  const autoLabels = async () => {
+    setFinding(true);
+    try {
+      const { findLabels } = await import('../ai/review');
+      const found = await findLabels(image, rects);
+      if (!found.length) await dialog.alert('Новых подписей не нашлось', 'Области можно нарисовать вручную.');
+      setRects((rs) => [...rs, ...found]);
+    } catch (e) {
+      const { aiErrorText } = await import('../ai/client');
+      await dialog.alert('Не удалось найти подписи', aiErrorText(e));
+    } finally {
+      setFinding(false);
+    }
+  };
   const stage = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
 
@@ -95,6 +112,9 @@ export function OcclusionEditor({ block, onClose }: { block: Block; onClose: () 
             Скрыть все
           </button>
         </div>
+        <button className="tool-btn text" disabled={finding} onClick={autoLabels} title="ИИ найдёт подписи на картинке и закроет их">
+          <Icon name="sparkle" /> {finding ? 'Ищу подписи…' : 'Найти подписи'}
+        </button>
         <button className="tool-btn" disabled={!sel} aria-label="Удалить область" onClick={() => (setRects(rects.filter((r) => r.id !== sel)), setSel(null))}>
           <Icon name="trash" />
         </button>
